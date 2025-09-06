@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>드라이브 파일 선택</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1023; color: var(--text); }
+    header { padding:12px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); display:flex; align-items:center; gap:10px; }
+    .brand { font-weight:700; }
+    .container { padding:14px; display:grid; grid-template-columns: 260px 1fr; gap:12px; height: calc(100vh - 54px); }
+    .panel { background:#0f172a; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px; overflow:auto; }
+    .tree-item { cursor:pointer; padding:6px 8px; border-radius:6px; }
+    .tree-item:hover { background: rgba(255,255,255,0.06); }
+    .row-between { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .badge { padding:2px 8px; border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-size:12px; }
+    .crumbs { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .crumb { cursor:pointer; color:var(--text); opacity:.9; }
+    .crumb:hover { text-decoration: underline; }
+    button { background: transparent; color: var(--text); border:1px solid rgba(255,255,255,0.2); padding:8px 10px; border-radius:8px; cursor:pointer; }
+    button.primary { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.12); }
+    input[type=text] { width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:var(--text); }
+    .item { border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px; cursor:pointer; transition: background .12s ease, outline .12s ease; }
+    .item:hover { background: rgba(255,255,255,0.06); }
+    .folder { color:#fff; }
+    .load-btn:hover { filter: brightness(1.1); box-shadow: 0 0 0 2px rgba(34,197,94,0.3) inset; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">드라이브 파일 선택</div>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <button onclick="window.close()">닫기</button>
+    </div>
+  </header>
+  <div class="container">
+    <div class="panel" id="tree"></div>
+    <div class="panel">
+      <div class="row-between" style="margin-bottom:8px;">
+        <div class="crumbs" id="crumbs"></div>
+        <div class="row-between" style="gap:8px;">
+          <button id="loadBtn" class="primary load-btn" disabled>불러오기</button>
+        </div>
+      </div>
+      <div id="entries" style="display:grid; gap:8px;"></div>
+      <div id="emptyMsg" class="muted" style="display:none; margin-top:8px;">파일이 없습니다.</div>
+    </div>
+  </div>
+
+  <script>
+    let selectedFile = null;
+    const treeEl = document.getElementById('tree');
+    const entriesEl = document.getElementById('entries');
+    const crumbsEl = document.getElementById('crumbs');
+    const loadBtn = document.getElementById('loadBtn');
+    const emptyMsg = document.getElementById('emptyMsg');
+    const navStack = [{ id: 'root', name: '연동된 드라이브' }];
+
+    async function list(parentId){
+      entriesEl.innerHTML = '<div class="muted">불러오는 중...</div>';
+      emptyMsg.style.display = 'none';
+      try {
+        const pid = (parentId===undefined) ? 'root' : parentId;
+        const res = await fetch(`/api/drive/browse${pid?`?parentId=${encodeURIComponent(pid)}`:''}`);
+        const json = await res.json();
+        const items = json.files || json.items || [];
+        return items;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function renderCrumbs(){
+      crumbsEl.innerHTML = '';
+      navStack.forEach((c, idx)=>{
+        const span = document.createElement('span');
+        span.className = 'crumb';
+        span.textContent = c.name;
+        span.onclick = async ()=>{
+          // go back to this level
+          while(navStack.length > idx+1) navStack.pop();
+          const items = await list(c.id);
+          renderEntries(items);
+          renderCrumbs();
+        };
+        crumbsEl.appendChild(span);
+        if (idx < navStack.length-1){
+          const sep = document.createElement('span'); sep.textContent = ' / '; crumbsEl.appendChild(sep);
+        }
+      });
+    }
+
+    function renderEntries(items){
+      entriesEl.innerHTML = '';
+      selectedFile = null;
+      loadBtn.disabled = true;
+      if (!items.length){ emptyMsg.style.display = 'block'; return; }
+      emptyMsg.style.display = 'none';
+      items.forEach(it=>{
+        const row = document.createElement('div');
+        row.className = 'row-between item';
+        const isFolder = (it.mimeType||'').includes('folder');
+        row.innerHTML = `<div>${isFolder?'<span class="folder">📁</span> ':''}${it.name} <span class='badge'>${it.mimeType||''}</span></div>`;
+        row.onclick = async ()=>{
+          if (isFolder){
+            navStack.push({ id: it.id, name: it.name });
+            const kids = await list(it.id);
+            renderEntries(kids);
+            renderCrumbs();
+          } else if ((it.mimeType||'').includes('spreadsheet')){
+            // 스프레드시트가 바로 선택됨
+            selectedFile = it;
+            loadBtn.disabled = false;
+            Array.from(entriesEl.children).forEach(ch=> ch.style.outline = '');
+            row.style.outline = '2px solid rgba(34,197,94,0.6)';
+          } else if ((it.shortcutDetails && it.shortcutDetails.targetMimeType||'').includes('spreadsheet')){
+            // 바로가기가 스프레드시트를 가리키는 경우
+            selectedFile = { id: it.shortcutDetails.targetId, name: it.name, mimeType: it.shortcutDetails.targetMimeType };
+            loadBtn.disabled = false;
+            Array.from(entriesEl.children).forEach(ch=> ch.style.outline = '');
+            row.style.outline = '2px solid rgba(34,197,94,0.6)';
+          }
+        };
+        entriesEl.appendChild(row);
+      });
+    }
+
+    async function renderTree(){
+      const rootKids = await list('root');
+      // 좌측 트리: 루트 + 1뎁스 폴더
+      treeEl.innerHTML = '';
+      const rootNode = document.createElement('div');
+      rootNode.className = 'tree-item';
+      rootNode.textContent = '연동된 드라이브';
+      rootNode.onclick = async ()=>{
+        navStack.splice(0, navStack.length, { id: 'root', name: '연동된 드라이브' });
+        const kids = await list('root');
+        renderEntries(kids);
+        renderCrumbs();
+      };
+      treeEl.appendChild(rootNode);
+      rootKids.filter(x=> (x.mimeType||'').includes('folder')).forEach(f=>{
+        const div = document.createElement('div');
+        div.className = 'tree-item';
+        div.style.paddingLeft = '18px';
+        div.textContent = '📁 ' + f.name;
+        div.onclick = async ()=>{
+          navStack.splice(0, navStack.length, { id: null, name: '연동된 드라이브' }, { id: f.id, name: f.name });
+          const kids = await list(f.id);
+          renderEntries(kids);
+          renderCrumbs();
+        };
+        treeEl.appendChild(div);
+      });
+      renderEntries(rootKids);
+      renderCrumbs();
+    }
+
+    loadBtn.addEventListener('click', ()=>{
+      if (!selectedFile) return;
+      const range = null; // 범위는 부모 페이지에서 자동 결정
+      try {
+        window.opener && window.opener.postMessage({ type:'picker_selected', fileId: selectedFile.id, range }, window.location.origin);
+      } catch(e) {}
+      window.close();
+    });
+
+    renderTree();
+  </script>
+</body>
+</html>
+
+

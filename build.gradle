@@ -28,11 +28,18 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// Google API Client & HTTP JSON (Drive REST 호출용)
+	implementation 'com.google.api-client:google-api-client:2.6.0'
+	implementation 'com.google.oauth-client:google-oauth-client-jetty:1.36.0'
+	implementation 'com.google.auth:google-auth-library-oauth2-http:1.30.0'
+	implementation 'com.google.http-client:google-http-client-jackson2:1.43.3'
+	// JSON Utils (Drive 검색 파싱)
+	implementation 'com.google.code.gson:gson:2.11.0'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 	annotationProcessor 'org.projectlombok:lombok'
-	providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
+	implementation 'org.springframework.boot:spring-boot-starter-tomcat'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

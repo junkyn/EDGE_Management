@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>면접 관리 - EDGE</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1023; color: var(--text); }
+    header { padding:14px 18px; }
+    a { color: var(--text); text-decoration:none; }
+    .container { padding:18px; display:flex; justify-content:center; }
+    .main { width:100%; max-width:1600px; display:flex; flex-direction:column; gap:14px; }
+    .content { display:grid; grid-template-columns: 1fr 340px; gap:14px; align-items:start; }
+    .panel { background: rgba(17,24,39,0.9); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:14px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .muted { color: var(--muted); }
+    input[type=text] { width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px 12px; color:var(--text); }
+    textarea { width:100%; min-height:80px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px 12px; color:var(--text); resize:none; overflow:hidden; }
+    button { background: transparent; color: var(--text); border:1px solid rgba(255,255,255,0.2); padding:8px 10px; border-radius:8px; cursor:pointer; }
+    button.primary { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.12); }
+    .list { display:flex; flex-direction:column; gap:8px; max-height: calc(100vh - 200px); overflow:auto; }
+    .item { padding:10px; border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer; }
+    .item.active { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.08); }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    /* Scores UI */
+    .score-card { border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
+    .score-title { font-weight:600; }
+    .score-note { font-size:12px; color: var(--muted); margin-top:2px; }
+    .score-controls { display:grid; grid-template-columns: repeat(10, 36px); gap:6px; margin-top:8px; }
+    .score-controls input { display:none; }
+    .score-controls label { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.15); border-radius:8px; cursor:pointer; }
+    .score-controls label.selected { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.6); }
+    .pill { padding:6px 10px; border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-size:12px; }
+    .right { display:flex; flex-direction:column; gap:10px; }
+    .score-btns button { width:28px; height:28px; font-size:12px; }
+    .settings .row { justify-content: space-between; }
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal { width: min(900px, 92vw); background: rgba(17,24,39,0.98); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; }
+    /* Settings modal: 높이 제한 + 스크롤 */
+    #settingsOverlay .modal { max-height: 80vh; overflow: auto; }
+    .modal h2 { margin:0 0 10px; font-size:18px; }
+    .modal .row { align-items: center; }
+    .list-col { display:flex; flex-direction:column; gap:10px; }
+    .q-row, .area-row { display:grid; grid-template-columns: 1fr auto; gap:10px; }
+    .area-row { grid-template-columns: 1fr 1fr auto; }
+    .ghost { opacity: .6; }
+    .toolbar { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    /* Settings questions visuals */
+    .q-block { background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
+    .q-label { font-size:12px; color:var(--muted); margin:0 0 6px 2px; }
+    .sub-title { font-size:12px; color:var(--muted); margin:8px 0 4px 2px; }
+    .sub-list { margin:0 0 10px 0; padding-left:10px; border-left:2px solid rgba(255,255,255,0.12); display:flex; flex-direction:column; gap:10px; }
+    /* Application QA cards */
+    .qa-card { border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
+    .qa-q { font-weight:600; margin-bottom:6px; }
+    .qa-a { white-space:pre-wrap; }
+    /* Center split */
+    .center { display:grid; grid-template-columns: minmax(700px, 1.5fr) minmax(420px, 1fr); gap:14px; }
+    .section { background:#0f172a; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; min-height:360px; }
+    .section.info { min-height:320px; min-width:700px; max-width:1200px; }
+    .section.qa { min-height:420px; min-width:480px; max-width:900px; }
+    /* File picker */
+    .picker { display:grid; grid-template-columns: 260px 1fr; gap:12px; height:70vh; }
+    .picker .tree, .picker .content { background:#0f172a; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px; overflow:auto; }
+    .tree-item { cursor:pointer; padding:6px 8px; border-radius:6px; }
+    .tree-item:hover { background: rgba(255,255,255,0.06); }
+    .row-between { display:flex; align-items:center; justify-content:space-between; }
+    .badge { padding:4px 8px; border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← 대시보드</a>
+  </header>
+  <div class="container">
+    <div class="main">
+      <div class="content">
+        <!-- 중앙 본문 -->
+        <div class="panel" id="detail">
+          <div class="center">
+            <div class="section info">
+              <div class="muted" style="font-size:12px;">지원자 정보</div>
+              <div id="applicantInfo" class="grid2" style="margin:8px 0 12px;"></div>
+              <div class="muted" style="font-size:12px;">지원서 질문/답변</div>
+              <div id="applicationQA" style="display:grid; gap:8px; margin-top:8px;"></div>
+            </div>
+            <div class="section qa">
+              <div class="muted" style="font-size:12px;">면접 질문/답변</div>
+              <div id="qaContainer" style="display:grid; gap:10px; margin-top:8px;"></div>
+              <div style="margin-top:12px;">
+                <div class="muted" style="font-size:12px;">면접관 코멘트</div>
+                <textarea id="interviewerComment" placeholder="총평/메모"></textarea>
+              </div>
+              <div style="margin-top:12px;">
+                <div class="muted" style="font-size:12px;">점수</div>
+                <div id="scores"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 오른쪽 사이드바 -->
+        <div class="right">
+          <div class="panel">
+            <div class="muted" style="font-size:12px; margin-bottom:6px;">면접관 이름</div>
+            <input id="interviewer" type="text" placeholder="예: 김운영" />
+          </div>
+          <div class="panel">
+            <div class="row" style="gap:8px;">
+              <button onclick="openPickerPopup()" class="primary">파일 선택</button>
+              <button onclick="openSettings()">설정</button>
+            </div>
+            <div id="sheetPicker" style="margin-top:10px; display:none;">
+              <div class="muted" style="font-size:12px; margin-bottom:6px;">시트 탭</div>
+              <select id="sheetSelect" style="width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;"></select>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="muted" style="font-size:12px; margin-bottom:6px;">지원자 목록</div>
+            <div id="applicants" class="list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let __drivePickerWin = null;
+    const state = {
+      // 질문 구조: [{ title: '큰 질문', sub: ['소1','소2', ...] }]
+      questions: Array.from({length: 6}, (_,i)=>({ title:`질문 ${i+1}` , sub:[] })),
+      scoreAreas: ['커뮤니케이션','문제해결','팀워크'],
+      scoreAreaNotes: ['','',''],
+      selectedApplicant: null,
+      selectedList: [],
+      sheet: { rows: [] },
+      applicantsRenderLock: false
+    };
+    // 기존 드라이브 선택/불러오기는 파일 선택 모달로 통합됨
+
+    function qs(sel){ return document.querySelector(sel); }
+    function el(tag, attrs={}, ...children){ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v)); children.forEach(c=> e.append(c)); return e; }
+
+    function applySettingsFromModal(){
+      state.applicantsRenderLock = true; // 적용 중에도 목록 고정
+      // 수집: 질문들 (큰 질문 + 소질문)
+      const blocks = Array.from(document.querySelectorAll('#modalQuestions > .q-block'));
+      const collected = [];
+      for (const b of blocks){
+        const main = b.querySelector('.q-input');
+        if (!main) continue;
+        const title = (main.value||'').trim();
+        if (!title) continue;
+        const subs = Array.from(b.querySelectorAll('.sub-input'))
+          .map(i=> (i.value||'').trim())
+          .filter(Boolean);
+        collected.push({ title, sub: subs });
+      }
+      if (!collected.length) collected.push({ title:'질문 1', sub:[] });
+      state.questions = collected;
+      // 수집: 점수영역 (이름, 설명)
+      const aNames = Array.from(document.querySelectorAll('#modalAreas .area-name'));
+      const aNotes = Array.from(document.querySelectorAll('#modalAreas .area-note'));
+      const names = []; const notes = [];
+      for (let i=0;i<aNames.length;i++){
+        const name = aNames[i].value.trim();
+        const note = aNotes[i].value.trim();
+        if (name) { names.push(name); notes.push(note); }
+      }
+      state.scoreAreas = names.length ? names : ['종합'];
+      state.scoreAreaNotes = names.length ? notes : [''];
+      closeSettings();
+      renderQA();
+      renderScores();
+      // 지원자 목록은 그대로 유지
+    }
+
+    function renderApplicants(){
+      if (state.applicantsRenderLock) return;
+      const box = qs('#applicants');
+      box.innerHTML = '';
+      state.sheet.rows.slice(1).forEach((row, idx)=>{
+        const name = row[1] || '(이름 없음)';
+        const div = el('div', { class:'item' + (state.selectedApplicant===idx?' active':'') });
+        div.textContent = name;
+        div.addEventListener('click', ()=>{ state.selectedApplicant = idx; renderDetail(); });
+        box.appendChild(div);
+      });
+    }
+
+    function renderDetail(){
+      const idx = state.selectedApplicant;
+      const infoBox = qs('#applicantInfo');
+      const appQA = qs('#applicationQA');
+      if (idx == null) { infoBox.innerHTML=''; if (appQA) appQA.innerHTML=''; qs('#qaContainer').innerHTML=''; qs('#scores').innerHTML=''; return; }
+      const row = state.sheet.rows[idx+1] || [];
+      const fields = ['타임스탬프','이름','학번','학년/재학'];
+      infoBox.innerHTML = '';
+      infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'이름'), el('div',{}, row[1]||'')));
+      infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'학번'), el('div',{}, row[2]||'')));
+      infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'학년/재학'), el('div',{}, row[3]||'')));
+      if (appQA) {
+        appQA.innerHTML = '';
+        const header = state.sheet.rows[0] || [];
+        for (let i=4;i<header.length;i++){
+          const q = header[i];
+          if (!q) continue;
+          const a = row[i] || '';
+          const card = el('div', { class:'qa-card' });
+          card.appendChild(el('div', { class:'qa-q' }, q));
+          card.appendChild(el('div', { class:'qa-a' }, a));
+          appQA.appendChild(card);
+        }
+      }
+      // 면접 질문/답변은 지원자 선택 시 업데이트하지 않음
+    }
+
+    function renderQA(){
+      const box = qs('#qaContainer');
+      box.innerHTML = '';
+      const idx = state.selectedApplicant;
+      const row = idx==null ? [] : (state.sheet.rows[idx+1]||[]);
+      state.questions.forEach((qObj)=>{
+        const block = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'muted';
+        title.style.marginBottom = '6px';
+        title.textContent = qObj.title;
+        block.appendChild(title);
+        if (qObj.sub && qObj.sub.length){
+          qObj.sub.forEach(subText=>{
+            const subWrap = document.createElement('div');
+            subWrap.style.marginBottom = '6px';
+            const subLabel = document.createElement('div');
+            subLabel.className = 'muted';
+            subLabel.style.fontSize = '12px';
+            subLabel.textContent = `- ${subText}`;
+            const ta = el('textarea', { placeholder:'답변 입력' });
+            const autoResize = () => { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+            ta.addEventListener('input', autoResize);
+            setTimeout(autoResize, 0);
+            subWrap.appendChild(subLabel);
+            subWrap.appendChild(ta);
+            block.appendChild(subWrap);
+          });
+        } else {
+          const ta = el('textarea', { placeholder:'답변 입력' });
+          const autoResize = () => { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+          ta.addEventListener('input', autoResize);
+          setTimeout(autoResize, 0);
+          block.appendChild(ta);
+        }
+        box.appendChild(block);
+      });
+    }
+
+    function renderScores(){
+      const box = qs('#scores');
+      box.innerHTML = '';
+      state.scoreAreas.forEach((area,idx)=>{
+        const card = el('div', { class:'score-card' });
+        const title = el('div', { class:'score-title' }, area);
+        card.append(title);
+        if (state.scoreAreaNotes && state.scoreAreaNotes[idx]) {
+          card.append(el('div', { class:'score-note' }, state.scoreAreaNotes[idx]));
+        }
+        const group = `score_${idx}`;
+        const controls = el('div', { class:'score-controls' });
+        for (let i=1;i<=10;i++){
+          const label = el('label', {});
+          const r = document.createElement('input');
+          r.type = 'radio'; r.name = group; r.value = String(i);
+          r.onchange = ()=>{
+            Array.from(controls.querySelectorAll('label')).forEach(l=> l.classList.remove('selected'));
+            label.classList.add('selected');
+          };
+          label.appendChild(r);
+          const txt = document.createElement('span'); txt.textContent = String(i); label.appendChild(txt);
+          controls.appendChild(label);
+        }
+        card.append(controls);
+        box.appendChild(card);
+      });
+    }
+
+    function addSelected(){
+      if (state.selectedApplicant==null) return;
+      const exists = state.selectedList.includes(state.selectedApplicant);
+      if (!exists) state.selectedList.push(state.selectedApplicant);
+      renderSelectedList();
+    }
+
+    function removeFromSelected(i){
+      state.selectedList = state.selectedList.filter(x=>x!==i);
+      renderSelectedList();
+    }
+
+    function renderSelectedList(){
+      // 우측 목록 아래에 선택된 지원자 뱃지 렌더
+      const box = qs('#applicants');
+      const sep = el('div', { class:'muted', style:'margin-top:8px;' }, '선택된 지원자');
+      box.appendChild(sep);
+      state.selectedList.forEach(i=>{
+        const row = state.sheet.rows[i+1]||[];
+        const name = row[1]||'';
+        const badge = el('div', { class:'row', style:'justify-content:space-between; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 8px; margin-top:6px;' },
+          el('div',{}, name),
+          el('button', { onclick:`removeFromSelected(${i})` }, '삭제')
+        );
+        box.appendChild(badge);
+      });
+    }
+
+    async function loadApplicantsBy(fileId, range){
+      // 시트 메타 먼저 가져와 탭 자동 선택
+      let metaTitles = [];
+      try {
+        const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
+        if (metaRes.ok){
+          const meta = await metaRes.json();
+          metaTitles = (meta.sheets||[]).map(s=> s.properties && s.properties.title).filter(Boolean);
+          const picker = qs('#sheetPicker');
+          const select = qs('#sheetSelect');
+          if (metaTitles.length){
+            picker.style.display = 'block';
+            select.innerHTML = '';
+            metaTitles.forEach(t=>{ const opt=document.createElement('option'); opt.value=t; opt.textContent=t; select.appendChild(opt); });
+            // 선택 변경 시 다시 불러오기를 쉽게 하기 위해 이벤트 바인딩
+            if (!select._bound) {
+              select.addEventListener('change', async ()=>{
+                const t = select.value;
+                const esc = t ? `'${t.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
+                try { await loadApplicantsBy(fileId, esc); } catch(e) { alert('불러오기에 실패했습니다.'); }
+              });
+              select._bound = true;
+            }
+          }
+        }
+      } catch(e){}
+
+      // 기본 범위 자동 구성
+      let effectiveRange = range;
+      if (!effectiveRange){
+        // 드롭다운에서 선택된 값 우선
+        const select = qs('#sheetSelect');
+        const title = (select && select.value) ? select.value : (metaTitles[0] || '');
+        effectiveRange = title ? `'${title.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
+      }
+
+      const url = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(effectiveRange)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(await res.text());
+      const json = await res.json();
+      state.sheet.rows = json.values || [];
+      state.selectedApplicant = null;
+      state.applicantsRenderLock = false;
+      renderApplicants();
+      qs('#applicants').scrollTop = 0;
+    }
+
+    // Settings Modal
+    function openSettings(){
+      state.applicantsRenderLock = true; // 세팅 중에는 지원자 목록 고정
+      const overlay = qs('#settingsOverlay');
+      const qBox = qs('#modalQuestions');
+      const aBox = qs('#modalAreas');
+      qBox.innerHTML = '';
+      (state.questions||[]).forEach((q)=> addQuestionRow(q.title, q.sub||[]));
+      aBox.innerHTML = '';
+      const names = state.scoreAreas || [];
+      const notes = state.scoreAreaNotes || [];
+      if (names.length === 0) { addAreaRow('',''); }
+      else {
+        names.forEach((n,i)=> addAreaRow(n, notes[i]||''));
+      }
+      overlay.style.display = 'flex';
+    }
+    function closeSettings(){ qs('#settingsOverlay').style.display = 'none'; state.applicantsRenderLock = false; }
+
+    function addQuestionRow(text='', subArr=[]) {
+      const qBox = qs('#modalQuestions');
+      const block = document.createElement('div');
+      block.className = 'q-block';
+      const wrap = el('div', { class:'q-row' });
+      const mainLabel = document.createElement('div');
+      mainLabel.className = 'q-label';
+      mainLabel.textContent = '영역';
+      block.appendChild(mainLabel);
+      const input = el('input', { class:'q-input', type:'text', value: text, placeholder:'큰 질문(영역) 텍스트', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
+      const del = el('button', {}, '삭제');
+      del.addEventListener('click', ()=> block.remove());
+      wrap.append(input, del);
+      const subs = document.createElement('div');
+      const subTitle = document.createElement('div');
+      subTitle.className = 'sub-title';
+      subTitle.textContent = '소질문';
+      subs.className = 'sub-list';
+      const addSubBtn = el('button', {}, '소질문 추가');
+      addSubBtn.addEventListener('click', ()=> addSubRow(subs, ''));
+      block.appendChild(wrap);
+      block.appendChild(subTitle);
+      block.appendChild(subs);
+      block.appendChild(addSubBtn);
+      qBox.appendChild(block);
+      (subArr||[]).forEach(s=> addSubRow(subs, s));
+    }
+
+    function addSubRow(parent, text=''){
+      const row = document.createElement('div');
+      row.className = 'q-row';
+      const input = el('input', { class:'sub-input', type:'text', value: text, placeholder:'소질문 텍스트', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
+      const del = el('button', {}, '삭제');
+      del.addEventListener('click', ()=> row.remove());
+      row.append(input, del);
+      parent.appendChild(row);
+    }
+    function addAreaRow(name='', note=''){
+      const aBox = qs('#modalAreas');
+      const wrap = el('div', { class:'area-row' });
+      const nameInput = el('input', { class:'area-name', type:'text', value: name, placeholder:'영역명', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
+      const noteInput = el('input', { class:'area-note', type:'text', value: note, placeholder:'부연 설명', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
+      const del = el('button', { onclick:'this.parentElement.remove()' }, '삭제');
+      wrap.append(nameInput, noteInput, del);
+      aBox.appendChild(wrap);
+    }
+
+    // 초기 렌더
+    renderQA();
+    renderScores();
+
+    function openPickerPopup(){
+      if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
+      __drivePickerWin = window.open('/drive-picker.html', 'edge-drive-picker', 'width=980,height=720');
+      const handler = async (ev)=>{
+        if (!ev.data || ev.data.type !== 'picker_selected') return;
+        try { await loadApplicantsBy(ev.data.fileId, ev.data.range); }
+        catch(e){ alert('불러오기에 실패했습니다.'); }
+        window.removeEventListener('message', handler);
+      };
+      window.addEventListener('message', handler);
+    }
+
+    function openPickerWithPurpose(purpose){
+      if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
+      __drivePickerWin = window.open('/drive-picker.html', 'edge-drive-picker', 'width=980,height=720');
+      const handler = (ev)=>{
+        if (!ev.data || ev.data.type !== 'picker_selected') return;
+        if (purpose === 'settings') {
+          qs('#settingsFileId').value = ev.data.fileId;
+        } else if (purpose === 'results') {
+          qs('#resultFileId').value = ev.data.fileId;
+        }
+        window.removeEventListener('message', handler);
+      };
+      window.addEventListener('message', handler);
+    }
+
+    async function loadSettingsFromSheet(){
+      state.applicantsRenderLock = true; // 세팅 로드 중 잠금
+      const fileId = qs('#settingsFileId').value.trim();
+      if (!fileId) { alert('세팅 파일을 먼저 선택하세요'); return; }
+      try {
+        const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
+        const meta = await metaRes.json();
+        const title = (meta.sheets && meta.sheets[0] && meta.sheets[0].properties && meta.sheets[0].properties.title) || '';
+        const range = title ? `'${title.replaceAll("'","''")}'!A1:D` : 'A1:D';
+        const res = await fetch(`/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(range)}`);
+        if (!res.ok) throw new Error(await res.text());
+        const json = await res.json();
+        const rows = json.values || [];
+        // 파서: 상단 블록은 '영역, 소질문'; 공백 후 '점수영역, 영역설명'
+        const questions = [];
+        let i = 0;
+        if (rows.length){ i = 1; }
+        // 질문 블록
+        let current = null;
+        for (; i<rows.length; i++){
+          const a = (rows[i][0]||'').trim();
+          const b = (rows[i][1]||'').trim();
+          const header = a === '점수영역' || b === '점수영역';
+          if (header) { i++; break; }
+          if (!a && !b) continue;
+          if (a){
+            if (current){ questions.push(current); }
+            current = { title: a, sub: [] };
+          }
+          if (b && current){ current.sub.push(b); }
+        }
+        if (current){ questions.push(current); }
+        if (questions.length){ state.questions = questions; }
+        // 점수 영역 블록
+        const areas=[], notes=[];
+        for (; i<rows.length; i++){
+          const name = (rows[i][0]||'').trim();
+          const note = (rows[i][1]||'').trim();
+          if (!name && !note) continue;
+          if (name) { areas.push(name); notes.push(note); }
+        }
+        if (areas.length) state.scoreAreas = areas;
+        if (notes.length) state.scoreAreaNotes = notes;
+        renderQA();
+        renderScores();
+        alert('세팅을 불러왔습니다.');
+      } catch(e) { alert('세팅 불러오기에 실패했습니다.'); }
+    }
+
+    async function saveSettingsToSheet(){
+      state.applicantsRenderLock = true; // 세팅 저장 중 잠금
+      const fileId = qs('#settingsFileId').value.trim();
+      if (!fileId) { alert('세팅 파일을 먼저 선택하세요'); return; }
+      try {
+        const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
+        const meta = await metaRes.json();
+        const title = (meta.sheets && meta.sheets[0] && meta.sheets[0].properties && meta.sheets[0].properties.title) || '';
+        // 값 생성
+        const values = [];
+        // 블록 1: 질문 (영역/소질문)
+        values.push(['영역','소질문','','']);
+        state.questions.forEach(q=>{
+          if (!q.sub || q.sub.length===0){
+            values.push([q.title,'','','']);
+          } else {
+            q.sub.forEach((s, idx)=>{
+              values.push([idx===0 ? q.title : '', s,'','']);
+            });
+          }
+        });
+        // 빈 줄
+        values.push(['','','','']);
+        // 블록 2: 점수 영역
+        values.push(['점수영역','영역설명','','']);
+        const maxLen = Math.max(state.scoreAreas.length, state.scoreAreaNotes.length);
+        for (let i=0;i<maxLen;i++){
+          values.push([state.scoreAreas[i]||'', state.scoreAreaNotes[i]||'', '', '']);
+        }
+        // 실제 작성할 행 수에 맞춰 동적 범위 지정
+        const endRow = Math.max(1, values.length);
+        const dynamicRange = title ? `'${title.replaceAll("'","''")}'!A1:D${endRow}` : `A1:D${endRow}`;
+        const resp = await fetch(`/api/interviews/applicants/update?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(dynamicRange)}&valueInputOption=USER_ENTERED`, {
+          method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ values })
+        });
+        if (resp.ok){
+          const data = await resp.json().catch(()=>null);
+          const ur = data && (data.updatedRange || (data.updates && data.updates.updatedRange));
+          alert(`세팅 파일 저장 완료\n범위: ${ur || dynamicRange}`);
+        } else {
+          const t = await resp.text();
+          alert(`세팅 저장 실패: ${t}`);
+        }
+      } catch(e) { alert('세팅 저장에 실패했습니다.'); }
+    }
+
+    window.addEventListener('beforeunload', ()=>{
+      try { if (__drivePickerWin && !__drivePickerWin.closed) __drivePickerWin.close(); } catch(e){}
+    });
+  </script>
+  <!-- Settings Modal -->
+  <div id="settingsOverlay" class="modal-overlay">
+    <div class="modal">
+      <h2>설정</h2>
+      <div class="muted" style="font-size:12px; margin-bottom:8px;">면접 질문과 점수 영역을 편집하세요</div>
+      <div class="row" style="gap:16px; align-items:flex-start;">
+        <div style="flex:1">
+          <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+            <div style="font-weight:600;">질문</div>
+            <button class="primary" onclick="addQuestionRow('')">+ 질문 추가</button>
+          </div>
+          <div id="modalQuestions" class="list-col"></div>
+        </div>
+        <div style="flex:1">
+          <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+            <div style="font-weight:600;">점수 영역</div>
+            <button class="primary" onclick="addAreaRow('','')">+ 영역 추가</button>
+          </div>
+          <div id="modalAreas" class="list-col"></div>
+        </div>
+      </div>
+
+      <hr style="border-color: rgba(255,255,255,0.08); margin:12px 0;" />
+      <div class="row" style="gap:12px; align-items:flex-end; flex-wrap:wrap;">
+        <div style="min-width:260px;">
+          <div class="muted" style="font-size:12px;">세팅 파일 ID</div>
+          <input id="settingsFileId" type="text" readonly placeholder="선택 후 자동 입력" />
+        </div>
+        <div class="row" style="gap:8px;">
+          <button onclick="openPickerWithPurpose('settings')">세팅 파일 선택</button>
+          <button class="primary" onclick="loadSettingsFromSheet()">불러오기</button>
+          <button onclick="saveSettingsToSheet()">저장</button>
+        </div>
+      </div>
+      <div class="row" style="gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:8px;">
+        <div style="min-width:260px;">
+          <div class="muted" style="font-size:12px;">면접 결과 파일 ID</div>
+          <input id="resultFileId" type="text" readonly placeholder="선택 후 자동 입력" />
+        </div>
+        <div class="row" style="gap:8px;">
+          <button onclick="openPickerWithPurpose('results')">결과 파일 선택</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button onclick="closeSettings()">닫기</button>
+        <button class="primary" onclick="applySettingsFromModal()">적용</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+
