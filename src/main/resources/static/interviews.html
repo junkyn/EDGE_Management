@@ -755,6 +755,7 @@
 
           if (resp.ok) {
             alert(`${applicantName}님의 평가가 저장되었습니다.`);
+            loadResultsBy(fileId);
           } else {
             throw new Error(await resp.text());
           }
@@ -782,6 +783,7 @@
 
           if (resp1.ok && resp2.ok) {
             alert(`${applicantName}님의 서기 내용 및 평가가 저장되었습니다.`);
+            loadResultsBy(fileId);
           } else {
             throw new Error("저장 실패");
           }
