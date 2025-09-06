@@ -197,15 +197,17 @@
       const appQA = qs('#applicationQA');
       if (idx == null) { infoBox.innerHTML=''; if (appQA) appQA.innerHTML=''; qs('#qaContainer').innerHTML=''; qs('#scores').innerHTML=''; return; }
       const row = state.sheet.rows[idx+1] || [];
-      const fields = ['타임스탬프','이름','학번','학년/재학'];
+
+      // '이름' 정보만 고정적으로 표시합니다.
       infoBox.innerHTML = '';
       infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'이름'), el('div',{}, row[1]||'')));
-      infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'학번'), el('div',{}, row[2]||'')));
-      infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'학년/재학'), el('div',{}, row[3]||'')));
+
+      // 지원서 질문/답변은 C열(인덱스 2)부터 시작하도록 변경합니다.
       if (appQA) {
         appQA.innerHTML = '';
         const header = state.sheet.rows[0] || [];
-        for (let i=4;i<header.length;i++){
+        // 시작 인덱스를 4에서 2로 변경
+        for (let i=2; i<header.length; i++){
           const q = header[i];
           if (!q) continue;
           const a = row[i] || '';
@@ -333,7 +335,7 @@
               select.addEventListener('change', async ()=>{
                 const t = select.value;
                 const esc = t ? `'${t.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
-                try { await loadApplicantsBy(fileId, esc); } catch(e) { alert('불러오기에 실패했습니다.'); }
+                try { await loadApplicantsBy(fileId, esc); } catch(e) { alert(e.message);}
               });
               select._bound = true;
             }
@@ -437,7 +439,7 @@
       const handler = async (ev)=>{
         if (!ev.data || ev.data.type !== 'picker_selected') return;
         try { await loadApplicantsBy(ev.data.fileId, ev.data.range); }
-        catch(e){ alert('불러오기에 실패했습니다.'); }
+        catch(e){ alert(e.message); }
         window.removeEventListener('message', handler);
       };
       window.addEventListener('message', handler);
