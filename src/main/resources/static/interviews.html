@@ -115,8 +115,9 @@
           </div>
           <div class="panel">
             <div class="row" style="gap:8px;">
-              <button id="load-applicants-btn" onclick="openPickerPopup()" class="primary">파일 선택</button>
+              <button id="load-applicants-btn" onclick="openPickerWithPurpose('applicants')" class="primary">파일 선택</button>
               <button onclick="openSettings()">설정</button>
+              <button id="save-evaluation-btn" onclick="saveEvaluation()">저장</button>
             </div>
             <div id="sheetPicker" style="margin-top:10px; display:none;">
               <div class="muted" style="font-size:12px; margin-bottom:6px;">시트 탭</div>
@@ -136,6 +137,7 @@
     let __drivePickerWin = null;
     let _viewMode = "eval";
     const state = {
+      isSavingEvaluation: false,
       isLoadingApplicants: false, // 지원자 목록 로딩 상태
       isLoadingSettings: false, // 설정 불러오기 상태
       isSavingSettings: false,  // 설정 저장 상태
@@ -149,7 +151,20 @@
       applicantsRenderLock: false
     };
     // 기존 드라이브 선택/불러오기는 파일 선택 모달로 통합됨
-
+    const pickerHandlers = {
+      /** 지원자 목록 파일 선택 시 실행될 핸들러 */
+      'applicants': function(data) {
+        loadApplicantsBy(data.fileId, data.range);
+      },
+      /** 설정 파일 선택 시 실행될 핸들러 */
+      'settings': function(data) {
+        qs('#settingsFileId').value = data.fileId;
+      },
+      /** 평가 저장 파일 선택 시 실행될 핸들러 */
+      'evaluation': function(data) {
+        qs('#evaluationFileId').value = data.fileId;
+      }
+    };
     function qs(sel){ return document.querySelector(sel); }
     function el(tag, attrs={}, ...children){ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v)); children.forEach(c=> e.append(c)); return e; }
 
@@ -430,30 +445,24 @@
     renderQA();
     renderScores();
 
-    function openPickerPopup(){
-      if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
-      __drivePickerWin = window.open('/drive-picker.html', 'edge-drive-picker', 'width=980,height=720');
-      const handler = async (ev)=>{
-        if (!ev.data || ev.data.type !== 'picker_selected') return;
-        try { await loadApplicantsBy(ev.data.fileId, ev.data.range); }
-        catch(e){ alert(e.message); }
-        window.removeEventListener('message', handler);
-      };
-      window.addEventListener('message', handler);
-    }
-
     function openPickerWithPurpose(purpose){
       if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
       __drivePickerWin = window.open('/drive-picker.html', 'edge-drive-picker', 'width=980,height=720');
       const handler = (ev)=>{
-        if (!ev.data || ev.data.type !== 'picker_selected') return;
-        if (purpose === 'settings') {
-          qs('#settingsFileId').value = ev.data.fileId;
-        } else if (purpose === 'results') {
-          qs('#resultFileId').value = ev.data.fileId;
+        if (window.location.origin !== ev.origin || !ev.data || ev.data.type !== 'picker_selected') {
+          return;
+        }
+
+        const func = pickerHandlers[purpose]; // 목적에 맞는 핸들러를 찾음
+
+        if (func) {
+          func(ev.data); // 핸들러가 있으면 실행
+        } else {
+          console.error('정의되지 않은 picker purpose입니다:', purpose);
         }
         window.removeEventListener('message', handler);
       };
+
       window.addEventListener('message', handler);
     }
 
@@ -566,6 +575,104 @@
       }
     }
 
+
+    async function saveEvaluation() {
+      // 1. '결과 보기' 모드에서는 저장 방지
+      if (_viewMode === 'result') {
+        alert('결과 보기 모드에서는 저장할 수 없습니다.');
+        return;
+      }
+
+      // 2. 중복 실행 방지
+      if (state.isSavingEvaluation) return;
+      state.isSavingEvaluation = true;
+      const btn = qs('#save-evaluation-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '저장 중...';
+      }
+
+      try {
+        // 3. 저장에 필요한 공통 데이터 수집
+        const fileId = qs('#evaluationFileId').value.trim();
+        if (!fileId) {
+          alert('설정 팝업에서 [평가 저장 파일]을 먼저 선택해주세요.');
+          // finally 블록이 실행되도록 함수를 조기 종료하기 전에 상태를 복원합니다.
+          state.isSavingEvaluation = false;
+          if(btn) { btn.disabled = false; btn.textContent = '저장'; }
+          return;
+        }
+        if (state.selectedApplicant == null) {
+          alert('저장할 면접자를 먼저 선택해주세요.');
+          state.isSavingEvaluation = false;
+          if(btn) { btn.disabled = false; btn.textContent = '저장'; }
+          return;
+        }
+
+        const applicantName = state.sheet.rows[state.selectedApplicant + 1][1] || '(이름 없음)';
+        const interviewerName = qs('#interviewer').value.trim();
+        const comment = qs('#interviewerComment').value.trim();
+        const selectedScores = Array.from(document.querySelectorAll('#scores input[type="radio"]:checked')).map(radio => radio.value);
+
+        // 4. "평가" 시트에 저장할 데이터 행 생성 (공통)
+        const evaluationRowData = [applicantName, interviewerName, comment, ...selectedScores];
+
+        // 5. 모드에 따라 분기 처리
+        if (_viewMode === 'eval') {
+          // 5-1. 평가 모드: 기존 'append' API를 호출하여 "평가" 시트에만 저장
+          const valuesToAppend = [evaluationRowData];
+          const range = "'평가'!A1";
+          const resp = await fetch(`/api/interviews/applicants/append?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(range)}&valueInputOption=USER_ENTERED`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "values": valuesToAppend })
+          });
+
+          if (resp.ok) {
+            alert(`${applicantName}님의 평가가 저장되었습니다.`);
+          } else {
+            throw new Error(await resp.text());
+          }
+
+        } else if (_viewMode === 'scribe') {
+          // 5-2. 서기 모드: 답변 수집 후 새로운 API 호출
+          // "서기" 시트에 저장할 답변 데이터 행 생성
+          const answers = Array.from(document.querySelectorAll('#qaContainer textarea')).map(ta => ta.value.trim());
+          const scribeRowData = [applicantName, ...answers];
+          const evaluationValuesToAppend = [evaluationRowData];
+          const scribeValuesToAppend = [scribeRowData];
+          const evalRange = "'평가'!A1";
+          const resp1 = await fetch(`/api/interviews/applicants/append?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(evalRange)}&valueInputOption=USER_ENTERED`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "values": evaluationValuesToAppend })
+          });
+
+          const scribeRange = "'서기'!A1";
+          const resp2 = await fetch(`/api/interviews/applicants/append?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(scribeRange)}&valueInputOption=USER_ENTERED`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "values": scribeValuesToAppend })
+          });
+
+          if (resp1.ok && resp2.ok) {
+            alert(`${applicantName}님의 서기 내용 및 평가가 저장되었습니다.`);
+          } else {
+            throw new Error("저장 실패");
+          }
+        }
+
+      } catch (e) {
+        alert('저장에 실패했습니다: ' + e.message);
+      } finally {
+        state.isSavingEvaluation = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '저장';
+        }
+      }
+    }
+
     window.addEventListener('beforeunload', ()=>{
       try { if (__drivePickerWin && !__drivePickerWin.closed) __drivePickerWin.close(); } catch(e){}
     });
@@ -594,17 +701,28 @@
 
       <hr style="border-color: rgba(255,255,255,0.08); margin:12px 0;" />
 
-      <div class="row" style="gap:12px; align-items:flex-end; flex-wrap:wrap;">
-        <div style="min-width:260px;">
+      <div class="row" style="gap:16px; align-items:flex-end;">
+        <div style="flex:1;">
           <div class="muted" style="font-size:12px;">세팅 파일 ID</div>
-          <input id="settingsFileId" type="text" readonly placeholder="선택 후 자동 입력" />
+          <div class="row" style="gap:8px;">
+            <input id="settingsFileId" type="text" readonly placeholder="선택 후 자동 입력" style="width:100%;" />
+            <button onclick="openPickerWithPurpose('settings')" style="flex-shrink:0;">파일 선택</button>
+          </div>
         </div>
-        <div class="row" style="gap:8px;">
-          <button onclick="openPickerWithPurpose('settings')">세팅 파일 선택</button>
-          <button id="load-settings-btn" class="primary" onclick="loadSettingsFromSheet()">불러오기</button>
-          <button id="save-settings-btn" onclick="saveSettingsToSheet()">저장</button>
+        <div style="flex:1;">
+          <div class="muted" style="font-size:12px;">평가 저장 파일 ID</div>
+          <div class="row" style="gap:8px;">
+            <input id="evaluationFileId" type="text" readonly placeholder="선택 후 자동 입력" style="width:100%;" />
+            <button onclick="openPickerWithPurpose('evaluation')" style="flex-shrink:0;">파일 선택</button>
+          </div>
         </div>
       </div>
+
+      <div class="row" style="gap:8px; margin-top: 8px;">
+        <button id="load-settings-btn" class="primary" onclick="loadSettingsFromSheet()">불러오기</button>
+        <button id="save-settings-btn" onclick="saveSettingsToSheet()">저장</button>
+      </div>
+
       <div class="toolbar">
         <button onclick="closeSettings()">닫기</button>
         <button class="primary" onclick="applySettingsFromModal()">적용</button>
