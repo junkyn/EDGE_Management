@@ -89,6 +89,11 @@
             </div>
             <div class="section qa">
               <div class="muted" style="font-size:12px;">면접 질문/답변</div>
+              <div class="mode-selector" onchange="setViewMode()">
+                <label><input type="radio" name="viewMode" value="eval" checked> 평가</label>
+                <label><input type="radio" name="viewMode" value="scribe"> 서기</label>
+                <label><input type="radio" name="viewMode" value="result"> 결과</label>
+              </div>
               <div id="qaContainer" style="display:grid; gap:10px; margin-top:8px;"></div>
               <div style="margin-top:12px;">
                 <div class="muted" style="font-size:12px;">면접관 코멘트</div>
@@ -129,6 +134,7 @@
 
   <script>
     let __drivePickerWin = null;
+    let _viewMode = "eval";
     const state = {
       isLoadingApplicants: false, // 지원자 목록 로딩 상태
       isLoadingSettings: false, // 설정 불러오기 상태
@@ -216,6 +222,10 @@
     function renderQA(){
       const box = qs('#qaContainer');
       box.innerHTML = '';
+      if (_viewMode == "eval") {
+        return;
+      }
+
       const idx = state.selectedApplicant;
       const row = idx==null ? [] : (state.sheet.rows[idx+1]||[]);
       state.questions.forEach((qObj)=>{
@@ -291,6 +301,13 @@
     function removeFromSelected(i){
       state.selectedList = state.selectedList.filter(x=>x!==i);
       renderSelectedList();
+    }
+
+    function setViewMode() {
+      const selectedMode = document.querySelector('input[name="viewMode"]:checked').value;
+      _viewMode = selectedMode;
+
+      renderQA();
     }
 
     function renderSelectedList(){
