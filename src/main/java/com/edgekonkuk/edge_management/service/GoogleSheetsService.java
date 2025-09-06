@@ -65,6 +65,7 @@ public class GoogleSheetsService {
             var jr = new com.google.gson.JsonArray();
             for (var v : row) { jr.add(v); }
             arr.add(jr);
+            System.out.println(row);
         }
         body.add("values", arr);
 

@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/interviews")
@@ -57,52 +60,70 @@ public class InterviewsController {
     public ResponseEntity<String> update(@RequestParam String spreadsheetId,
                                          @RequestParam(defaultValue = "A1:Z999") String range,
                                          @RequestParam(defaultValue = "USER_ENTERED") String valueInputOption,
-                                         @RequestBody JsonObject payload) throws IOException {
+                                         @RequestBody Map<String, Object> payload) {
         try {
-            // 선택 범위를 먼저 비우고 덮어쓰기(응답의 updatedRange가 A1로만 나오는 케이스 방지)
+            // 선택 범위를 먼저 비우고 덮어쓰기
             try { sheetsService.clearValues(spreadsheetId, range); } catch (Exception ignore) {}
-            JsonArray rows = payload.getAsJsonArray("values");
-            java.util.List<java.util.List<String>> values = new java.util.ArrayList<>();
-            if (rows != null) {
-                for (JsonElement e : rows) {
-                    JsonArray r = e.getAsJsonArray();
-                    java.util.List<String> row = new java.util.ArrayList<>();
-                    for (JsonElement c : r) row.add(c.isJsonNull()?"":c.getAsString());
-                    values.add(row);
-                }
+
+            // 💡 Map에서 "values" 키로 데이터를 바로 가져옴 (타입 캐스팅)
+            List<List<Object>> values = (List<List<Object>>) payload.get("values");
+
+            // values가 null일 경우를 대비해 빈 리스트로 초기화
+            if (values == null) {
+                values = new ArrayList<>();
             }
-            return ResponseEntity.ok(sheetsService.updateValues(spreadsheetId, range, valueInputOption, values));
+
+            List<List<String>> stringValues = new ArrayList<>();
+            for (List<Object> row : values) {
+                List<String> newRow = new ArrayList<>();
+                for (Object cell : row) {
+                    // 각 셀의 Object를 String으로 변환 (null일 경우 빈 문자열로 처리)
+                    newRow.add(cell != null ? cell.toString() : "");
+                }
+                stringValues.add(newRow);
+            }
+
+            String result = sheetsService.updateValues(spreadsheetId, range, valueInputOption, stringValues);
+            return ResponseEntity.ok(result);
+
         } catch (HttpResponseException hre) {
-            int status = hre.getStatusCode();
-            String body = hre.getContent();
-            if (body == null || body.isBlank()) body = "Google API error";
-            return ResponseEntity.status(status).body(body);
+            return ResponseEntity.status(hre.getStatusCode()).body(hre.getContent());
+        } catch (Exception e) { // IOException, ClassCastException 등 처리
+            return ResponseEntity.status(500).body("{\"message\": \"Error processing request: " + e.getMessage() + "\"}");
         }
     }
 
-    // 시트 끝에 추가
+    // 💡 Jackson을 사용하도록 수정한 append 메소드
     @PostMapping("/applicants/append")
     public ResponseEntity<String> append(@RequestParam String spreadsheetId,
                                          @RequestParam(defaultValue = "A1:Z999") String range,
                                          @RequestParam(defaultValue = "USER_ENTERED") String valueInputOption,
-                                         @RequestBody JsonObject payload) throws IOException {
+                                         @RequestBody Map<String, Object> payload) { // 💡 JsonObject를 Map으로 변경
         try {
-            JsonArray rows = payload.getAsJsonArray("values");
-            java.util.List<java.util.List<String>> values = new java.util.ArrayList<>();
-            if (rows != null) {
-                for (JsonElement e : rows) {
-                    JsonArray r = e.getAsJsonArray();
-                    java.util.List<String> row = new java.util.ArrayList<>();
-                    for (JsonElement c : r) row.add(c.isJsonNull()?"":c.getAsString());
-                    values.add(row);
-                }
+            // 💡 Map에서 "values" 키로 데이터를 바로 가져옴 (타입 캐스팅)
+            List<List<Object>> values = (List<List<Object>>) payload.get("values");
+
+            if (values == null) {
+                values = new ArrayList<>();
             }
-            return ResponseEntity.ok(sheetsService.appendValues(spreadsheetId, range, valueInputOption, values));
+
+            List<List<String>> stringValues = new ArrayList<>();
+            for (List<Object> row : values) {
+                List<String> newRow = new ArrayList<>();
+                for (Object cell : row) {
+                    // 각 셀의 Object를 String으로 변환 (null일 경우 빈 문자열로 처리)
+                    newRow.add(cell != null ? cell.toString() : "");
+                }
+                stringValues.add(newRow);
+            }
+
+            String result = sheetsService.appendValues(spreadsheetId, range, valueInputOption, stringValues);
+            return ResponseEntity.ok(result);
+
         } catch (HttpResponseException hre) {
-            int status = hre.getStatusCode();
-            String body = hre.getContent();
-            if (body == null || body.isBlank()) body = "Google API error";
-            return ResponseEntity.status(status).body(body);
+            return ResponseEntity.status(hre.getStatusCode()).body(hre.getContent());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("{\"message\": \"Error processing request: " + e.getMessage() + "\"}");
         }
     }
 }

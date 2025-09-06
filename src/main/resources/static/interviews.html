@@ -110,7 +110,7 @@
           </div>
           <div class="panel">
             <div class="row" style="gap:8px;">
-              <button onclick="openPickerPopup()" class="primary">파일 선택</button>
+              <button id="load-applicants-btn" onclick="openPickerPopup()" class="primary">파일 선택</button>
               <button onclick="openSettings()">설정</button>
             </div>
             <div id="sheetPicker" style="margin-top:10px; display:none;">
@@ -130,6 +130,9 @@
   <script>
     let __drivePickerWin = null;
     const state = {
+      isLoadingApplicants: false, // 지원자 목록 로딩 상태
+      isLoadingSettings: false, // 설정 불러오기 상태
+      isSavingSettings: false,  // 설정 저장 상태
       // 질문 구조: [{ title: '큰 질문', sub: ['소1','소2', ...] }]
       questions: Array.from({length: 6}, (_,i)=>({ title:`질문 ${i+1}` , sub:[] })),
       scoreAreas: ['커뮤니케이션','문제해결','팀워크'],
@@ -145,37 +148,27 @@
     function el(tag, attrs={}, ...children){ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v)); children.forEach(c=> e.append(c)); return e; }
 
     function applySettingsFromModal(){
-      state.applicantsRenderLock = true; // 적용 중에도 목록 고정
-      // 수집: 질문들 (큰 질문 + 소질문)
-      const blocks = Array.from(document.querySelectorAll('#modalQuestions > .q-block'));
-      const collected = [];
-      for (const b of blocks){
-        const main = b.querySelector('.q-input');
-        if (!main) continue;
-        const title = (main.value||'').trim();
-        if (!title) continue;
-        const subs = Array.from(b.querySelectorAll('.sub-input'))
-          .map(i=> (i.value||'').trim())
-          .filter(Boolean);
-        collected.push({ title, sub: subs });
-      }
-      if (!collected.length) collected.push({ title:'질문 1', sub:[] });
-      state.questions = collected;
-      // 수집: 점수영역 (이름, 설명)
-      const aNames = Array.from(document.querySelectorAll('#modalAreas .area-name'));
-      const aNotes = Array.from(document.querySelectorAll('#modalAreas .area-note'));
-      const names = []; const notes = [];
-      for (let i=0;i<aNames.length;i++){
-        const name = aNames[i].value.trim();
-        const note = aNotes[i].value.trim();
-        if (name) { names.push(name); notes.push(note); }
-      }
-      state.scoreAreas = names.length ? names : ['종합'];
-      state.scoreAreaNotes = names.length ? notes : [''];
+      state.applicantsRenderLock = true;
+      // 질문 수집
+      const questions = Array.from(document.querySelectorAll('#modalQuestions .q-input'))
+              .map(input => (input.value || '').trim())
+              .filter(Boolean)
+              .map(title => ({ title: title, sub: [] }));
+      if (!questions.length) questions.push({ title:'질문 1', sub:[] });
+      state.questions = questions;
+
+      // 점수 영역 수집
+      const scoreAreas = Array.from(document.querySelectorAll('#modalAreas .area-name'))
+              .map(input => input.value.trim())
+              .filter(Boolean);
+      if (!scoreAreas.length) scoreAreas.push('종합');
+      state.scoreAreas = scoreAreas;
+      // 참고: scoreAreaNotes는 단순화를 위해 이번 버전에서는 제외합니다.
+      state.scoreAreaNotes = Array(state.scoreAreas.length).fill('');
+
       closeSettings();
       renderQA();
       renderScores();
-      // 지원자 목록은 그대로 유지
     }
 
     function renderApplicants(){
@@ -317,99 +310,86 @@
     }
 
     async function loadApplicantsBy(fileId, range){
-      // 시트 메타 먼저 가져와 탭 자동 선택
-      let metaTitles = [];
+      if (state.isLoadingApplicants) return;
+      state.isLoadingApplicants = true;
+      const btn = qs('#load-applicants-btn');
+      if(btn) btn.disabled = true;
+
       try {
-        const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
-        if (metaRes.ok){
-          const meta = await metaRes.json();
-          metaTitles = (meta.sheets||[]).map(s=> s.properties && s.properties.title).filter(Boolean);
-          const picker = qs('#sheetPicker');
-          const select = qs('#sheetSelect');
-          if (metaTitles.length){
-            picker.style.display = 'block';
-            select.innerHTML = '';
-            metaTitles.forEach(t=>{ const opt=document.createElement('option'); opt.value=t; opt.textContent=t; select.appendChild(opt); });
-            // 선택 변경 시 다시 불러오기를 쉽게 하기 위해 이벤트 바인딩
-            if (!select._bound) {
-              select.addEventListener('change', async ()=>{
-                const t = select.value;
-                const esc = t ? `'${t.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
-                try { await loadApplicantsBy(fileId, esc); } catch(e) { alert(e.message);}
-              });
-              select._bound = true;
+        let metaTitles = [];
+        try {
+          const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
+          if (metaRes.ok){
+            const meta = await metaRes.json();
+            metaTitles = (meta.sheets||[]).map(s=> s.properties && s.properties.title).filter(Boolean);
+            const picker = qs('#sheetPicker');
+            const select = qs('#sheetSelect');
+            if (metaTitles.length){
+              picker.style.display = 'block';
+              select.innerHTML = '';
+              metaTitles.forEach(t=>{ const opt=document.createElement('option'); opt.value=t; opt.textContent=t; select.appendChild(opt); });
+              if (!select._bound) {
+                select.addEventListener('change', async ()=>{
+                  const t = select.value;
+                  const esc = t ? `'${t.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
+                  await loadApplicantsBy(fileId, esc);
+                });
+                select._bound = true;
+              }
             }
           }
+        } catch(e){ console.error('Sheet meta fetch failed:', e); }
+
+        let effectiveRange = range;
+        if (!effectiveRange){
+          const select = qs('#sheetSelect');
+          const title = (select && select.value) ? select.value : (metaTitles[0] || '');
+          effectiveRange = title ? `'${title.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
         }
-      } catch(e){}
 
-      // 기본 범위 자동 구성
-      let effectiveRange = range;
-      if (!effectiveRange){
-        // 드롭다운에서 선택된 값 우선
-        const select = qs('#sheetSelect');
-        const title = (select && select.value) ? select.value : (metaTitles[0] || '');
-        effectiveRange = title ? `'${title.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
+        const url = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(effectiveRange)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(await res.text());
+        const json = await res.json();
+        state.sheet.rows = json.values || [];
+        state.selectedApplicant = null;
+        state.applicantsRenderLock = false;
+        renderApplicants();
+        qs('#applicants').scrollTop = 0;
+      } catch (e) {
+        alert('지원자 목록을 불러오는 데 실패했습니다: ' + e.message);
+      } finally {
+        state.isLoadingApplicants = false;
+        if(btn) btn.disabled = false;
       }
-
-      const url = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(effectiveRange)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(await res.text());
-      const json = await res.json();
-      state.sheet.rows = json.values || [];
-      state.selectedApplicant = null;
-      state.applicantsRenderLock = false;
-      renderApplicants();
-      qs('#applicants').scrollTop = 0;
     }
 
     // Settings Modal
     function openSettings(){
-      state.applicantsRenderLock = true; // 세팅 중에는 지원자 목록 고정
+      state.applicantsRenderLock = true;
       const overlay = qs('#settingsOverlay');
       const qBox = qs('#modalQuestions');
       const aBox = qs('#modalAreas');
+
       qBox.innerHTML = '';
-      (state.questions||[]).forEach((q)=> addQuestionRow(q.title, q.sub||[]));
+      (state.questions||[]).forEach((q)=> addQuestionRow(q.title));
+
       aBox.innerHTML = '';
-      const names = state.scoreAreas || [];
-      const notes = state.scoreAreaNotes || [];
-      if (names.length === 0) { addAreaRow('',''); }
-      else {
-        names.forEach((n,i)=> addAreaRow(n, notes[i]||''));
-      }
+      (state.scoreAreas||[]).forEach((area)=> addAreaRow(area));
+
       overlay.style.display = 'flex';
     }
     function closeSettings(){ qs('#settingsOverlay').style.display = 'none'; state.applicantsRenderLock = false; }
 
-    function addQuestionRow(text='', subArr=[]) {
+    function addQuestionRow(text='') {
       const qBox = qs('#modalQuestions');
-      const block = document.createElement('div');
-      block.className = 'q-block';
       const wrap = el('div', { class:'q-row' });
-      const mainLabel = document.createElement('div');
-      mainLabel.className = 'q-label';
-      mainLabel.textContent = '영역';
-      block.appendChild(mainLabel);
-      const input = el('input', { class:'q-input', type:'text', value: text, placeholder:'큰 질문(영역) 텍스트', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
+      const input = el('input', { class:'q-input', type:'text', value: text, placeholder:'질문 텍스트', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
       const del = el('button', {}, '삭제');
-      del.addEventListener('click', ()=> block.remove());
+      del.addEventListener('click', ()=> wrap.remove());
       wrap.append(input, del);
-      const subs = document.createElement('div');
-      const subTitle = document.createElement('div');
-      subTitle.className = 'sub-title';
-      subTitle.textContent = '소질문';
-      subs.className = 'sub-list';
-      const addSubBtn = el('button', {}, '소질문 추가');
-      addSubBtn.addEventListener('click', ()=> addSubRow(subs, ''));
-      block.appendChild(wrap);
-      block.appendChild(subTitle);
-      block.appendChild(subs);
-      block.appendChild(addSubBtn);
-      qBox.appendChild(block);
-      (subArr||[]).forEach(s=> addSubRow(subs, s));
+      qBox.appendChild(wrap);
     }
-
     function addSubRow(parent, text=''){
       const row = document.createElement('div');
       row.className = 'q-row';
@@ -419,15 +399,15 @@
       row.append(input, del);
       parent.appendChild(row);
     }
-    function addAreaRow(name='', note=''){
+    function addAreaRow(name=''){
       const aBox = qs('#modalAreas');
-      const wrap = el('div', { class:'area-row' });
+      const wrap = el('div', { class:'q-row' }); // q-row 스타일 재사용
       const nameInput = el('input', { class:'area-name', type:'text', value: name, placeholder:'영역명', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
-      const noteInput = el('input', { class:'area-note', type:'text', value: note, placeholder:'부연 설명', style:'width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 10px; color:#e5e7eb;' });
       const del = el('button', { onclick:'this.parentElement.remove()' }, '삭제');
-      wrap.append(nameInput, noteInput, del);
+      wrap.append(nameInput, del);
       aBox.appendChild(wrap);
     }
+
 
     // 초기 렌더
     renderQA();
@@ -461,98 +441,112 @@
     }
 
     async function loadSettingsFromSheet(){
-      state.applicantsRenderLock = true; // 세팅 로드 중 잠금
-      const fileId = qs('#settingsFileId').value.trim();
-      if (!fileId) { alert('세팅 파일을 먼저 선택하세요'); return; }
+      if (state.isLoadingSettings) return;
+      state.isLoadingSettings = true;
+      const btn = qs('#load-settings-btn');
+      if(btn) {
+        btn.disabled = true;
+        btn.textContent = '불러오는 중...';
+      }
+
       try {
+        const fileId = qs('#settingsFileId').value.trim();
+        if (!fileId) { alert('세팅 파일을 먼저 선택하세요'); return; }
         const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
         const meta = await metaRes.json();
         const title = (meta.sheets && meta.sheets[0] && meta.sheets[0].properties && meta.sheets[0].properties.title) || '';
-        const range = title ? `'${title.replaceAll("'","''")}'!A1:D` : 'A1:D';
+        const range = title ? `'${title.replaceAll("'","''")}'!1:2` : '1:2';
         const res = await fetch(`/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(range)}`);
         if (!res.ok) throw new Error(await res.text());
         const json = await res.json();
         const rows = json.values || [];
-        // 파서: 상단 블록은 '영역, 소질문'; 공백 후 '점수영역, 영역설명'
-        const questions = [];
-        let i = 0;
-        if (rows.length){ i = 1; }
-        // 질문 블록
-        let current = null;
-        for (; i<rows.length; i++){
-          const a = (rows[i][0]||'').trim();
-          const b = (rows[i][1]||'').trim();
-          const header = a === '점수영역' || b === '점수영역';
-          if (header) { i++; break; }
-          if (!a && !b) continue;
-          if (a){
-            if (current){ questions.push(current); }
-            current = { title: a, sub: [] };
-          }
-          if (b && current){ current.sub.push(b); }
-        }
-        if (current){ questions.push(current); }
-        if (questions.length){ state.questions = questions; }
-        // 점수 영역 블록
-        const areas=[], notes=[];
-        for (; i<rows.length; i++){
-          const name = (rows[i][0]||'').trim();
-          const note = (rows[i][1]||'').trim();
-          if (!name && !note) continue;
-          if (name) { areas.push(name); notes.push(note); }
-        }
-        if (areas.length) state.scoreAreas = areas;
-        if (notes.length) state.scoreAreaNotes = notes;
+
+        const questionRow = rows[0] || [];
+        const scoreAreaRow = rows[1] || [];
+
+        const questions = questionRow.map(title => ({ title: title.trim(), sub: [] })).filter(q => q.title);
+        const scoreAreas = scoreAreaRow.map(area => area.trim()).filter(Boolean);
+
+        if (questions.length) state.questions = questions;
+        if (scoreAreas.length) state.scoreAreas = scoreAreas;
+
         renderQA();
         renderScores();
+        const qBox = qs('#modalQuestions');
+        const aBox = qs('#modalAreas');
+        qBox.innerHTML = '';
+        aBox.innerHTML = '';
+        state.questions.forEach(q => addQuestionRow(q.title));
+        state.scoreAreas.forEach(area => addAreaRow(area));
+
         alert('세팅을 불러왔습니다.');
-      } catch(e) { alert('세팅 불러오기에 실패했습니다.'); }
+      } catch(e) {
+        alert('세팅 불러오기에 실패했습니다: ' + e.message);
+      } finally {
+        state.isLoadingSettings = false;
+        if(btn) {
+          btn.disabled = false;
+          btn.textContent = '불러오기';
+        }
+        state.applicantsRenderLock = false;
+      }
     }
 
-    async function saveSettingsToSheet(){
-      state.applicantsRenderLock = true; // 세팅 저장 중 잠금
-      const fileId = qs('#settingsFileId').value.trim();
-      if (!fileId) { alert('세팅 파일을 먼저 선택하세요'); return; }
+    async function saveSettingsToSheet() {
+      applySettingsFromModal();
+
+      if (state.isSavingSettings) return;
+      state.isSavingSettings = true;
+      const btn = qs('#save-settings-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '저장 중...';
+      }
+
       try {
+        const fileId = qs('#settingsFileId').value.trim();
+        if (!fileId) {
+          alert('세팅 파일을 먼저 선택하세요');
+          return;
+        }
         const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
         const meta = await metaRes.json();
-        const title = (meta.sheets && meta.sheets[0] && meta.sheets[0].properties && meta.sheets[0].properties.title) || '';
-        // 값 생성
-        const values = [];
-        // 블록 1: 질문 (영역/소질문)
-        values.push(['영역','소질문','','']);
-        state.questions.forEach(q=>{
-          if (!q.sub || q.sub.length===0){
-            values.push([q.title,'','','']);
-          } else {
-            q.sub.forEach((s, idx)=>{
-              values.push([idx===0 ? q.title : '', s,'','']);
-            });
-          }
+        const sheetTitle = (meta.sheets && meta.sheets[0] && meta.sheets[0].properties && meta.sheets[0].properties.title) || '';
+
+        const questionTitles = state.questions.map(q => q.title);
+        const scoreAreaNames = state.scoreAreas;
+        const values = [questionTitles, scoreAreaNames];
+
+        const range = sheetTitle ? `'${sheetTitle.replaceAll("'", "''")}'!1:2` : '1:2';
+        await fetch(`/api/interviews/applicants/clear?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(range)}`, {
+          method: 'POST'
         });
-        // 빈 줄
-        values.push(['','','','']);
-        // 블록 2: 점수 영역
-        values.push(['점수영역','영역설명','','']);
-        const maxLen = Math.max(state.scoreAreas.length, state.scoreAreaNotes.length);
-        for (let i=0;i<maxLen;i++){
-          values.push([state.scoreAreas[i]||'', state.scoreAreaNotes[i]||'', '', '']);
-        }
-        // 실제 작성할 행 수에 맞춰 동적 범위 지정
-        const endRow = Math.max(1, values.length);
-        const dynamicRange = title ? `'${title.replaceAll("'","''")}'!A1:D${endRow}` : `A1:D${endRow}`;
-        const resp = await fetch(`/api/interviews/applicants/update?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(dynamicRange)}&valueInputOption=USER_ENTERED`, {
-          method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ values })
+
+        const resp = await fetch(`/api/interviews/applicants/update?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(range)}&valueInputOption=USER_ENTERED`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            "values": values
+          })
         });
-        if (resp.ok){
-          const data = await resp.json().catch(()=>null);
-          const ur = data && (data.updatedRange || (data.updates && data.updates.updatedRange));
-          alert(`세팅 파일 저장 완료\n범위: ${ur || dynamicRange}`);
+
+        if (resp.ok) {
+          alert(`세팅 파일 저장 완료`);
         } else {
           const t = await resp.text();
-          alert(`세팅 저장 실패: ${t}`);
+          throw new Error(t);
         }
-      } catch(e) { alert('세팅 저장에 실패했습니다.'); }
+      } catch (e) {
+        alert('세팅 저장에 실패했습니다: ' + e.message);
+      } finally {
+        state.isSavingSettings = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '저장';
+        }
+      }
     }
 
     window.addEventListener('beforeunload', ()=>{
@@ -563,25 +557,26 @@
   <div id="settingsOverlay" class="modal-overlay">
     <div class="modal">
       <h2>설정</h2>
-      <div class="muted" style="font-size:12px; margin-bottom:8px;">면접 질문과 점수 영역을 편집하세요</div>
+      <div class="muted" style="font-size:12px; margin-bottom:8px;">면접 질문(1행)과 점수 영역(2행)을 편집하세요.</div>
       <div class="row" style="gap:16px; align-items:flex-start;">
         <div style="flex:1">
           <div class="row" style="justify-content:space-between; margin-bottom:6px;">
-            <div style="font-weight:600;">질문</div>
+            <div style="font-weight:600;">질문 목록 (1행)</div>
             <button class="primary" onclick="addQuestionRow('')">+ 질문 추가</button>
           </div>
           <div id="modalQuestions" class="list-col"></div>
         </div>
         <div style="flex:1">
           <div class="row" style="justify-content:space-between; margin-bottom:6px;">
-            <div style="font-weight:600;">점수 영역</div>
-            <button class="primary" onclick="addAreaRow('','')">+ 영역 추가</button>
+            <div style="font-weight:600;">점수 영역 (2행)</div>
+            <button class="primary" onclick="addAreaRow('')">+ 영역 추가</button>
           </div>
           <div id="modalAreas" class="list-col"></div>
         </div>
       </div>
 
       <hr style="border-color: rgba(255,255,255,0.08); margin:12px 0;" />
+
       <div class="row" style="gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <div style="min-width:260px;">
           <div class="muted" style="font-size:12px;">세팅 파일 ID</div>
@@ -589,17 +584,8 @@
         </div>
         <div class="row" style="gap:8px;">
           <button onclick="openPickerWithPurpose('settings')">세팅 파일 선택</button>
-          <button class="primary" onclick="loadSettingsFromSheet()">불러오기</button>
-          <button onclick="saveSettingsToSheet()">저장</button>
-        </div>
-      </div>
-      <div class="row" style="gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:8px;">
-        <div style="min-width:260px;">
-          <div class="muted" style="font-size:12px;">면접 결과 파일 ID</div>
-          <input id="resultFileId" type="text" readonly placeholder="선택 후 자동 입력" />
-        </div>
-        <div class="row" style="gap:8px;">
-          <button onclick="openPickerWithPurpose('results')">결과 파일 선택</button>
+          <button id="load-settings-btn" class="primary" onclick="loadSettingsFromSheet()">불러오기</button>
+          <button id="save-settings-btn" onclick="saveSettingsToSheet()">저장</button>
         </div>
       </div>
       <div class="toolbar">
