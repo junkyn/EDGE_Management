@@ -98,6 +98,7 @@
               <div style="margin-top:12px;">
                 <div class="muted" style="font-size:12px;">면접관 코멘트</div>
                 <textarea id="interviewerComment" placeholder="총평/메모"></textarea>
+                <div id="interviewerCommentResult" style="display: none; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; line-height: 1.6;"></div>
               </div>
               <div style="margin-top:12px;">
                 <div class="muted" style="font-size:12px;">점수</div>
@@ -148,7 +149,10 @@
       selectedApplicant: null,
       selectedList: [],
       sheet: { rows: [] },
-      applicantsRenderLock: false
+      applicantsRenderLock: false,
+
+      scribeData: new Map(),      // 서기 데이터 저장소: <면접자이름, 답변[]>
+      evaluationData: new Map()   // 평가 데이터 저장소: <면접자이름, 면접평가[]>
     };
     // 기존 드라이브 선택/불러오기는 파일 선택 모달로 통합됨
     const pickerHandlers = {
@@ -163,6 +167,7 @@
       /** 평가 저장 파일 선택 시 실행될 핸들러 */
       'evaluation': function(data) {
         qs('#evaluationFileId').value = data.fileId;
+        loadResultsBy(data.fileId);
       }
     };
     function qs(sel){ return document.querySelector(sel); }
@@ -190,6 +195,7 @@
       closeSettings();
       renderQA();
       renderScores();
+      renderComments();
     }
 
     function renderApplicants(){
@@ -242,6 +248,31 @@
       }
 
       const idx = state.selectedApplicant;
+      if (_viewMode == "result") {
+        if (idx == null) {
+          box.innerHTML = '<div class="muted">결과를 볼 지원자를 선택하세요.</div>';
+          return;
+        }
+
+        const applicantName = state.sheet.rows[idx + 1]?.[1];
+        if (!applicantName || !state.scribeData.has(applicantName)) {
+          box.innerHTML = '<div class="muted">해당 지원자의 서기 데이터가 없습니다.</div>';
+          return;
+        }
+
+        const answers = state.scribeData.get(applicantName) || [];
+
+        // state에 저장된 질문 목록을 기반으로 답변을 출력합니다.
+        state.questions.forEach((qObj, i) => {
+          const card = el('div', { class: 'qa-card' }); // 기존 스타일 재사용
+          const question = el('div', { class: 'qa-q' }, qObj.title);
+          const answer = el('div', { class: 'qa-a' }, answers[i] || '(답변 없음)');
+          card.append(question, answer);
+          box.appendChild(card);
+        });
+        return;
+      }
+
       const row = idx==null ? [] : (state.sheet.rows[idx+1]||[]);
       state.questions.forEach((qObj)=>{
         const block = document.createElement('div');
@@ -280,6 +311,47 @@
     function renderScores(){
       const box = qs('#scores');
       box.innerHTML = '';
+
+      // ▼▼▼ '결과' 모드 로직을 함수 최상단에 추가하세요 ▼▼▼
+      if (_viewMode === 'result') {
+        const idx = state.selectedApplicant;
+        if (idx == null) {
+          box.innerHTML = '<div class="muted">지원자를 선택하면 평균 점수가 표시됩니다.</div>';
+          return;
+        }
+
+        const applicantName = state.sheet.rows[idx + 1]?.[1];
+        const evaluations = state.evaluationData.get(applicantName);
+
+        if (!evaluations || evaluations.length === 0) {
+          box.innerHTML = '<div class="muted">해당 지원자의 평가 데이터가 없습니다.</div>';
+          return;
+        }
+
+        // 각 점수 항목별 합계를 계산
+        const numScoreAreas = state.scoreAreas.length;
+        const totalScores = Array(numScoreAreas).fill(0);
+
+        evaluations.forEach(ev => {
+          for (let i = 0; i < numScoreAreas; i++) {
+            totalScores[i] += parseInt(ev.scores[i], 10) || 0;
+          }
+        });
+
+        // 평균을 계산하고 반올림
+        const avgScores = totalScores.map(total => Math.round(total / evaluations.length));
+
+        // 계산된 평균 점수를 화면에 렌더링
+        state.scoreAreas.forEach((area, i) => {
+          const card = el('div', { class:'score-card' });
+          const title = el('div', { class:'score-title' }, area);
+          const avgScoreDisplay = el('div', { style: 'font-size: 24px; font-weight: 600; margin-top: 8px; color: var(--accent); text-align: center;' }, String(avgScores[i] || 'N/A'));
+          card.append(title, avgScoreDisplay);
+          box.appendChild(card);
+        });
+        return; // '결과' 모드에서는 아래의 점수 입력 UI를 렌더링하지 않음
+      }
+
       state.scoreAreas.forEach((area,idx)=>{
         const card = el('div', { class:'score-card' });
         const title = el('div', { class:'score-title' }, area);
@@ -306,6 +378,54 @@
       });
     }
 
+    function renderComments() {
+      const textarea = qs('#interviewerComment');
+      const resultBox = qs('#interviewerCommentResult');
+      if (!textarea || !resultBox) return;
+
+      if (_viewMode === 'result') {
+        // 결과 모드: 결과 박스를 보여주고, 입력창은 숨김
+        textarea.style.display = 'none';
+        resultBox.style.display = 'block';
+
+        const idx = state.selectedApplicant;
+        if (idx == null) {
+          resultBox.innerHTML = '<div class="muted">지원자를 선택하면 면접관 코멘트가 표시됩니다.</div>';
+          return;
+        }
+
+        const applicantName = state.sheet.rows[idx + 1]?.[1];
+        const evaluations = state.evaluationData.get(applicantName);
+
+        if (!evaluations || evaluations.length === 0) {
+          resultBox.innerHTML = '<div class="muted">해당 지원자의 코멘트 데이터가 없습니다.</div>';
+          return;
+        }
+
+        // 각 평가에 대해 코멘트와 점수 목록을 함께 보여주는 HTML을 생성
+        const fullCommentHTML = evaluations.map(ev => {
+          // 점수 부분을 HTML 문자열로 생성
+          const scoresHTML = ev.scores.map((score, index) => {
+            const scoreAreaName = state.scoreAreas[index] || `점수 ${index + 1}`;
+            // \t (탭) 대신 CSS로 들여쓰기 효과를 줍니다.
+            return `<div style="padding-left: 20px;">${scoreAreaName} : ${score}</div>`;
+          }).join('');
+
+          // 코멘트 라인과 점수 HTML을 결합
+          const commentLine = `- <strong>${ev.interviewerName || '(이름 없음)'}</strong>: ${ev.comment || '(코멘트 없음)'}`;
+
+          return `${commentLine}${scoresHTML}`;
+        }).join('<hr style="border-color: rgba(255,255,255,0.08); margin: 8px 0;">'); // 각 면접관 사이에 구분선 추가
+
+        resultBox.innerHTML = fullCommentHTML;
+
+      } else {
+        // 평가 또는 서기 모드: 입력창을 보여주고, 결과 박스는 숨김
+        textarea.style.display = 'block';
+        resultBox.style.display = 'none';
+      }
+    }
+
     function addSelected(){
       if (state.selectedApplicant==null) return;
       const exists = state.selectedList.includes(state.selectedApplicant);
@@ -323,6 +443,8 @@
       _viewMode = selectedMode;
 
       renderQA();
+      renderScores();
+      renderComments();
     }
 
     function renderSelectedList(){
@@ -444,6 +566,7 @@
     // 초기 렌더
     renderQA();
     renderScores();
+    renderComments();
 
     function openPickerWithPurpose(purpose){
       if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
@@ -498,6 +621,8 @@
 
         renderQA();
         renderScores();
+        renderComments();
+
         const qBox = qs('#modalQuestions');
         const aBox = qs('#modalAreas');
         qBox.innerHTML = '';
@@ -670,6 +795,98 @@
           btn.disabled = false;
           btn.textContent = '저장';
         }
+      }
+    }
+
+    function showApplicantResult() {
+      const applicantRow = state.sheet.rows[state.selectedApplicant + 1] || [];
+      const applicantName = applicantRow[1];
+
+      if (applicantName) {
+        // 특정 면접자의 서기 내용 (답변 배열) 가져오기
+        const answers = state.scribeData.get(applicantName);
+        if (answers) {
+          console.log(`${applicantName}님의 답변:`, answers.join('\n'));
+        }
+
+        // 특정 면접자의 평가 내용 (평가 객체 배열) 가져오기
+        const evaluations = state.evaluationData.get(applicantName);
+        if (evaluations) {
+          evaluations.forEach(ev => {
+            console.log(`- 평가자: ${ev.interviewerName}, 코멘트: ${ev.comment}, 점수: ${ev.scores.join(', ')}`);
+          });
+        }
+      }
+    }
+
+    /**
+     * 평가 결과 파일을 불러와 '서기'와 '평가' 시트 데이터를 파싱하고
+     * state.scribeData와 state.evaluationData에 저장
+     * @param {string} fileId - 구글 스프레드시트 파일 ID
+     */
+    async function loadResultsBy(fileId) {
+      if (!fileId) return;
+      alert('평가 결과 파일 로딩을 시작합니다.');
+
+      try {
+        // 1. "서기" 시트 데이터 가져오기 및 파싱
+        const scribeRange = "'서기'!A:Z";
+        const scribeUrl = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(scribeRange)}`;
+        const scribeRes = await fetch(scribeUrl);
+        if (scribeRes.ok) {
+          const scribeJson = await scribeRes.json();
+          const scribeRows = scribeJson.values || [];
+          state.scribeData.clear(); // 기존 데이터 초기화
+
+          // 첫 번째 헤더 줄 제외
+          scribeRows.forEach(row => {
+            if (!row || !row[0]) return; // 이름이 없는 행은 건너뜀
+            const applicantName = row[0];
+            const answers = row.slice(1); // 이름 뒤의 모든 열을 답변으로 저장
+            state.scribeData.set(applicantName, answers);
+          });
+        } else {
+          console.error("서기 시트 로딩 실패:", await scribeRes.text());
+        }
+
+        // 2. "평가" 시트 데이터 가져오기 및 파싱
+        const evalRange = "'평가'!A:Z";
+        const evalUrl = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(evalRange)}`;
+        const evalRes = await fetch(evalUrl);
+        if (evalRes.ok) {
+          const evalJson = await evalRes.json();
+          const evalRows = evalJson.values || [];
+          state.evaluationData.clear(); // 기존 데이터 초기화
+
+          // 첫 번째 헤더 줄 제외
+          evalRows.forEach(row => {
+            if (!row || !row[0]) return; // 이름이 없는 행은 건너뜀
+            const applicantName = row[0];
+
+            // "면접 평가" 구조체(객체) 생성
+            const evaluationEntry = {
+              interviewerName: row[1] || '', // 2열: 면접관 이름
+              comment: row[2] || '',         // 3열: 코멘트
+              scores: row.slice(3)          // 나머지 뒷열: 점수 배열
+            };
+
+            // Map에 데이터 추가 (한 면접자에게 여러 평가가 있을 수 있으므로 배열로 관리)
+            if (state.evaluationData.has(applicantName)) {
+              state.evaluationData.get(applicantName).push(evaluationEntry);
+            } else {
+              state.evaluationData.set(applicantName, [evaluationEntry]);
+            }
+          });
+        } else {
+          console.error("평가 시트 로딩 실패:", await evalRes.text());
+        }
+
+        alert('평가 결과 로딩이 완료되었습니다. 콘솔에서 저장된 데이터를 확인해보세요.');
+        console.log("서기 데이터:", state.scribeData);
+        console.log("평가 데이터:", state.evaluationData);
+
+      } catch (e) {
+        alert('결과를 불러오는 데 실패했습니다: ' + e.message);
       }
     }
 
