@@ -57,3 +57,8 @@ bootJar {
 	archiveBaseName = 'edge-management'
 	archiveVersion = project.version
 }
+
+// 보안: credentials 폴더를 JAR에서 제외
+processResources {
+	exclude '**/credentials/**'
+}
