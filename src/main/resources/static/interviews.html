@@ -23,6 +23,7 @@
     .list { display:flex; flex-direction:column; gap:8px; max-height: calc(100vh - 200px); overflow:auto; }
     .item { padding:10px; border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer; }
     .item.active { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.08); }
+    .item.bookmarked { border-color: rgba(59,130,246,0.6); background: rgba(59,130,246,0.08); }
     .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
     /* Scores UI */
     .score-card { border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
@@ -69,6 +70,13 @@
     .tree-item:hover { background: rgba(255,255,255,0.06); }
     .row-between { display:flex; align-items:center; justify-content:space-between; }
     .badge { padding:4px 8px; border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-size:12px; }
+    /* Bookmark bar */
+    .bookmark-bar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+    .bookmark-btn { position:relative; }
+    .bookmark-btn.active { outline: 2px solid rgba(34,197,94,0.6); }
+    .bookmark-name { max-width:180px; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; }
+    /* detail panel width fix */
+    #detail { width: 1300px; }
   </style>
 </head>
 <body>
@@ -80,6 +88,12 @@
       <div class="content">
         <!-- 중앙 본문 -->
         <div class="panel" id="detail">
+          <div class="bookmark-bar">
+            <div class="muted"></div>
+            <button class="bookmark-btn" id="bm-0" onclick="onBookmarkClick(0)"><span class="bookmark-name">없음</span></button>
+            <button class="bookmark-btn" id="bm-1" onclick="onBookmarkClick(1)"><span class="bookmark-name">없음</span></button>
+            <button class="bookmark-btn" id="bm-2" onclick="onBookmarkClick(2)"><span class="bookmark-name">없음</span></button>
+          </div>
           <div class="center">
             <div class="section info">
               <div class="muted" style="font-size:12px;">지원자 정보</div>
@@ -147,12 +161,18 @@
       scoreAreas: ['커뮤니케이션','문제해결','팀워크'],
       scoreAreaNotes: ['','',''],
       selectedApplicant: null,
-      selectedList: [],
+      // 북마크: 각 슬롯은 { id: string|null, name: string|null } 구조로 관리 (id=학번)
+      bookmarks: [ { id: null, name: null }, { id: null, name: null }, { id: null, name: null } ],
+      activeBookmark: 0,
       sheet: { rows: [] },
       applicantsRenderLock: false,
 
       scribeData: new Map(),      // 서기 데이터 저장소: <면접자이름, 답변[]>
-      evaluationData: new Map()   // 평가 데이터 저장소: <면접자이름, 면접평가[]>
+      evaluationData: new Map(),  // 평가 데이터 저장소: <면접자이름, 면접평가[]>
+      // 캐시: 입력값 보존용 (학번 기준)
+      cachedAnswers: new Map(),   // <지원자ID, string[]>
+      cachedScores: new Map(),    // <지원자ID, string[]>
+      cachedComment: new Map()    // <지원자ID, string>
     };
     // 기존 드라이브 선택/불러오기는 파일 선택 모달로 통합됨
     const pickerHandlers = {
@@ -202,11 +222,39 @@
       if (state.applicantsRenderLock) return;
       const box = qs('#applicants');
       box.innerHTML = '';
+      const assignedIds = new Set(state.bookmarks.map(b=> b.id).filter(Boolean));
       state.sheet.rows.slice(1).forEach((row, idx)=>{
+        const id = row[0] || '';
         const name = row[1] || '(이름 없음)';
-        const div = el('div', { class:'item' + (state.selectedApplicant===idx?' active':'') });
+        const assignedTo = getBookmarkIndexById(id);
+        const isAssigned = assignedIds.has(id);
+        const classes = ['item'];
+        const isCurrent = state.bookmarks[state.activeBookmark]?.id && (state.bookmarks[state.activeBookmark].id === id);
+        if (isCurrent) classes.push('active');
+        else if (isAssigned) classes.push('bookmarked');
+        const div = el('div', { class: classes.join(' ') });
         div.textContent = name;
-        div.addEventListener('click', ()=>{ state.selectedApplicant = idx; renderDetail(); });
+        div.addEventListener('click', ()=>{
+          // 현재 북마크에 이미 배정된 지원자를 다시 클릭하면 해제
+          if (assignedTo === state.activeBookmark) {
+            persistCurrentInputs();
+            state.bookmarks[state.activeBookmark] = { id: null, name: null };
+            state.selectedApplicant = null;
+            updateBookmarkButtons();
+            renderDetail();
+            renderQA();
+            renderScores();
+            renderComments();
+            renderApplicants();
+            return;
+          }
+          // 이미 다른 북마크에 배정된 경우 차단
+          if (assignedTo != null && assignedTo !== state.activeBookmark) {
+            alert('이미 다른 북마크에 선택된 지원자입니다.');
+            return;
+          }
+          assignApplicantToActiveBookmarkByIndex(idx);
+        });
         box.appendChild(div);
       });
     }
@@ -306,6 +354,8 @@
         }
         box.appendChild(block);
       });
+      // QA 텍스트영역에 캐시 적용
+      applyCacheToUIForCurrent();
     }
 
     function renderScores(){
@@ -376,6 +426,8 @@
         card.append(controls);
         box.appendChild(card);
       });
+      // 점수 캐시 적용
+      applyCacheToUIForCurrent();
     }
 
     function renderComments() {
@@ -439,12 +491,15 @@
     }
 
     function setViewMode() {
+      // 모드 전환 전 현재 활성 북마크 입력 보존
+      persistCurrentInputs();
       const selectedMode = document.querySelector('input[name="viewMode"]:checked').value;
       _viewMode = selectedMode;
 
       renderQA();
       renderScores();
       renderComments();
+      applyCacheToUIForCurrent();
     }
 
     function renderSelectedList(){
@@ -518,6 +573,139 @@
       }
     }
 
+    // --- 북마크/캐시 도우미 ---
+    function updateBookmarkButtons(){
+      for (let i=0; i<3; i++){
+        const btn = qs(`#bm-${i}`);
+        if (!btn) continue;
+        const name = state.bookmarks[i].name;
+        const span = btn.querySelector('.bookmark-name');
+        span.textContent = name ? name : '없음';
+        btn.classList.toggle('active', state.activeBookmark === i);
+      }
+    }
+
+    function onBookmarkClick(i){
+      if (i===state.activeBookmark) return;
+      // 현재 활성 북마크 입력값 보존
+      persistCurrentInputs();
+      state.activeBookmark = i;
+      // 새 북마크의 지원자로 전환
+      const id = state.bookmarks[i].id;
+      if (id){
+        const idx = findApplicantIndexById(id);
+        state.selectedApplicant = idx;
+      } else {
+        state.selectedApplicant = null;
+      }
+      updateBookmarkButtons();
+      renderDetail();
+      renderQA();
+      renderScores();
+      renderComments();
+      applyCacheToUIForCurrent();
+      // 전환 시 목록 상태도 즉시 갱신
+      renderApplicants();
+    }
+
+    function findApplicantIndexById(id){
+      if (!id) return null;
+      for (let i=1;i<state.sheet.rows.length;i++){
+        if ((state.sheet.rows[i]?.[0]||'') === id) return i-1; // stored index is 0-based after header
+      }
+      return null;
+    }
+
+    function getApplicantNameByIndex(idx){
+      if (idx==null) return null;
+      return state.sheet.rows[idx+1]?.[1] || null;
+    }
+    function getApplicantIdByIndex(idx){
+      if (idx==null) return null;
+      return state.sheet.rows[idx+1]?.[0] || null;
+    }
+
+    function assignApplicantToActiveBookmarkByIndex(idx){
+      const id = getApplicantIdByIndex(idx) || '';
+      const name = getApplicantNameByIndex(idx) || '(이름 없음)';
+      // 중복 방지: 다른 북마크에 동일 ID가 있으면 차단
+      const already = state.bookmarks.some((b,bi)=> b.id === id && bi !== state.activeBookmark);
+      if (already){
+        alert('이미 다른 북마크에 선택된 지원자입니다.');
+        return;
+      }
+      // 현재 입력 보존 후 교체
+      persistCurrentInputs();
+      state.bookmarks[state.activeBookmark] = { id, name };
+      state.selectedApplicant = idx;
+      updateBookmarkButtons();
+      renderDetail();
+      renderQA();
+      renderScores();
+      renderComments();
+      applyCacheToUIForCurrent();
+      // 목록 리렌더로 중복 표시 갱신
+      renderApplicants();
+    }
+
+    function getBookmarkIndexById(id){
+      for (let i=0;i<state.bookmarks.length;i++){
+        if (state.bookmarks[i].id === id) return i;
+      }
+      return null;
+    }
+
+    function persistCurrentInputs(){
+      const currentId = state.bookmarks[state.activeBookmark]?.id;
+      if (!currentId) return;
+      // QA 답변
+      const answers = Array.from(document.querySelectorAll('#qaContainer textarea')).map(ta => ta.value || '');
+      if (answers.length) state.cachedAnswers.set(currentId, answers);
+      // 점수
+      const selected = [];
+      for (let i=0;i<state.scoreAreas.length;i++){
+        const r = document.querySelector(`#scores input[name="score_${i}"]:checked`);
+        selected.push(r ? r.value : '');
+      }
+      state.cachedScores.set(currentId, selected);
+      // 코멘트
+      const cmtEl = qs('#interviewerComment');
+      if (cmtEl) state.cachedComment.set(currentId, cmtEl.value || '');
+    }
+
+    function applyCacheToUIForCurrent(){
+      const id = state.bookmarks[state.activeBookmark]?.id;
+      if (!id) return;
+      // QA
+      const answers = state.cachedAnswers.get(id) || [];
+      const tas = Array.from(document.querySelectorAll('#qaContainer textarea'));
+      tas.forEach((ta, i)=>{
+        if (answers[i] != null) {
+          ta.value = answers[i];
+          // autoresize
+          ta.style.height = 'auto';
+          ta.style.height = (ta.scrollHeight + 2) + 'px';
+        }
+      });
+      // Scores
+      const scores = state.cachedScores.get(id) || [];
+      scores.forEach((val, i)=>{
+        if (!val) return;
+        const input = document.querySelector(`#scores input[name="score_${i}"][value="${val}"]`);
+        if (input){
+          input.checked = true;
+          const group = input.closest('.score-controls');
+          if (group){ Array.from(group.querySelectorAll('label')).forEach(l=> l.classList.remove('selected')); }
+          const label = input.closest('label');
+          if (label){ label.classList.add('selected'); }
+        }
+      });
+      // Comment
+      const c = state.cachedComment.get(id);
+      const cmtEl = qs('#interviewerComment');
+      if (cmtEl != null && typeof c === 'string') cmtEl.value = c;
+    }
+
     // Settings Modal
     function openSettings(){
       state.applicantsRenderLock = true;
@@ -567,6 +755,7 @@
     renderQA();
     renderScores();
     renderComments();
+    updateBookmarkButtons();
 
     function openPickerWithPurpose(purpose){
       if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
