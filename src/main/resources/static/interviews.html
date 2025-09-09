@@ -874,7 +874,8 @@
         let rowIndex = -1;
         for (let i=0;i<rows.length;i++){
           const r = rows[i] || [];
-          if ((r[0] && r[0] === applicantId) || (r[1] && r[1] === applicantName)) { rowIndex = i; break; }
+          // 학번으로만 기존 행을 식별 (이름 일치 매칭 제거)
+          if (r[0] && r[0] === applicantId) { rowIndex = i; break; }
         }
         if (rowIndex >= 0) {
           const targetRange = `'서기'!A${rowIndex+1}:Z${rowIndex+1}`;
