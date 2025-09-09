@@ -934,6 +934,13 @@
       alert('평가 결과 파일 로딩을 시작합니다.');
 
       try {
+        // 현재 지원자 목록에서 유효한 학번 집합 구성
+        const validApplicantIds = new Set(
+          (state.sheet.rows || []).slice(1)
+            .map(r => (r && r[3]) ? String(r[3]) : '')
+            .filter(Boolean)
+        );
+
         // 1. "서기" 시트 데이터 가져오기 및 파싱
         const scribeRange = "'서기'!A:Z";
         const scribeUrl = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(scribeRange)}`;
@@ -945,10 +952,13 @@
 
           // 첫 번째 헤더 줄 제외
           scribeRows.forEach(row => {
-            if (!row || !row[0]) return; // ID가 없는 행은 건너뜀
-            const applicantId = row[0];
-            // 새 포맷: [ID, 이름, 답변...], 구버전: [이름, 답변...]
-            const offset = (row.length >= 2 && row[1] && row[1] !== '') ? 2 : 1;
+            if (!row || !row[0]) return; // 비어있는 행은 스킵
+            const firstCol = String(row[0]);
+            // 학번(지원자 ID)로만 식별: 현재 지원자 목록에 없는 값은 무시
+            if (!validApplicantIds.has(firstCol)) return;
+            const applicantId = firstCol;
+            // 새 포맷 기준으로 답변 시작 인덱스 계산 (이름 컬럼 유무 무관하게 ID 이후부터 취급)
+            const offset = (row.length >= 3) ? 2 : 1;
             const answers = row.slice(offset);
             state.scribeData.set(applicantId, answers);
           });
@@ -967,18 +977,13 @@
 
           // 첫 번째 헤더 줄 제외
           evalRows.forEach(row => {
-            if (!row || !row[0]) return; // ID가 없는 행은 건너뜀
-            const applicantId = row[0];
-            // 새 포맷: [ID, 이름, 면접관, 코멘트, 점수...]
-            // 구버전 호환(이름부터 시작): [이름, 면접관, 코멘트, 점수...]
-            let interviewerIdx = 2, commentIdx = 3, scoreStart = 4;
-            if (!row[2] || (row[2] && row[2].includes && row[2].includes('면접관'))) {
-              // 형태가 확실치 않으면 기본 인덱스 유지
-            }
-            // 구버전 감지: row[0]가 숫자/영문 혼합 학번 패턴이 아니고, row[1]에 면접관일 가능성
-            if (row.length >= 3 && row[1] && row[2] && !/\d/.test(row[0])) {
-              interviewerIdx = 1; commentIdx = 2; scoreStart = 3;
-            }
+            if (!row || !row[0]) return; // 비어있는 행은 스킵
+            const firstCol = String(row[0]);
+            // 학번(지원자 ID)로만 식별: 현재 지원자 목록에 없는 값은 무시
+            if (!validApplicantIds.has(firstCol)) return;
+            const applicantId = firstCol;
+            // 새 포맷 고정: [ID, 이름, 면접관, 코멘트, 점수...]
+            const interviewerIdx = 2, commentIdx = 3, scoreStart = 4;
             const evaluationEntry = {
               interviewerName: row[interviewerIdx] || '',
               comment: row[commentIdx] || '',
