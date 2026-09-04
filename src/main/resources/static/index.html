@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EDGE 관리 시스템</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg, #0b1023, #0f172a); color:var(--text); }
+        header { padding:24px 20px; display:flex; align-items:center; justify-content:space-between; }
+        .brand { display:flex; align-items:center; gap:12px; font-weight:700; font-size:18px; }
+        .brand .dot { width:12px; height:12px; border-radius:50%; background:var(--accent); box-shadow:0 0 24px var(--accent); }
+        .container { max-width:1100px; margin:0 auto; padding:24px 20px 56px; }
+        h1 { font-size:28px; margin:10px 0 24px; letter-spacing:-0.02em; }
+        p.lead { color:var(--muted); margin:0 0 28px; }
+        .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:16px; }
+        .card { background:rgba(17,24,39,0.8); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:18px; transition: transform .15s ease, border-color .15s ease, background .15s ease; backdrop-filter: blur(6px); }
+        .card:hover { transform: translateY(-2px); border-color: rgba(34,197,94,0.4); }
+        .card h3 { margin:0 0 10px; font-size:16px; }
+        .card p { margin:0 0 14px; color:var(--muted); font-size:13px; line-height:1.4; }
+        .actions { display:flex; gap:10px; }
+        .btn { appearance:none; border:1px solid rgba(255,255,255,0.12); background:transparent; color:var(--text); padding:10px 12px; border-radius:10px; font-weight:600; font-size:13px; cursor:pointer; transition: background .15s ease, border-color .15s ease; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
+        .btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.3); }
+        .btn.primary { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.12); }
+        .footer { margin-top:36px; color:var(--muted); font-size:12px; }
+    </style>
+    <script>
+        function nav(path) { window.location.href = path; }
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span class="dot"></span>EDGE 관리 시스템</div>
+    </header>
+    <div class="container">
+      <h1>대시보드</h1>
+      <p class="lead">운영진 작업을 선택하세요.</p>
+
+      <div class="grid">
+        <div class="card">
+          <h3>연명부 관리</h3>
+          <p>회원 정보 열람/추가/수정, 드라이브 스프레드시트 연동</p>
+          <div class="actions">
+            <a class="btn primary" href="/members.html">열기</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>면접 관리</h3>
+          <p>지원자 명단, 일정 배정, 평가 기록</p>
+          <div class="actions">
+            <a class="btn primary" href="/interviews.html">열기</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>설정</h3>
+          <p>면접 질문/점수 영역, 파일 ID(지원서/평가 결과) 관리</p>
+          <div class="actions">
+            <a class="btn" href="/settings.html">열기</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>회의 기록</h3>
+          <p>안건/결정/액션아이템 기록 및 드라이브 문서 업로드</p>
+          <div class="actions">
+            <a class="btn primary" href="/meetings.html">열기</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>구글 폼 생성</h3>
+          <p>모집/설문 폼 템플릿 기반 생성 및 링크 공유</p>
+          <div class="actions">
+            <a class="btn primary" href="/forms.html">열기</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>드라이브 파일</h3>
+          <p>폴더 생성, 업로드/삭제, 최근 파일 열람</p>
+          <div class="actions">
+            <a class="btn" href="/drive.html">열기</a>
+            <a class="btn" href="/api/drive/files?userId=demo" target="_blank">목록 API</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">© 2025 EDGE KONKUK</div>
+    </div>
+  </body>
+</html>
+
+

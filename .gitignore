@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Local app configuration (do not commit secrets)
+credentials/
