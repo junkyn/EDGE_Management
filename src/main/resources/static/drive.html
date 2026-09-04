@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>드라이브 파일 - EDGE</title>
+  <style> body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:24px; } a { text-decoration:none; } .back { margin-bottom:16px; display:inline-block; } pre { background:#111827; color:#e5e7eb; padding:12px; border-radius:8px; overflow:auto; } button { padding:8px 12px; } </style>
+</head>
+<body>
+  <a class="back" href="/">← 대시보드</a>
+  <h1>드라이브 파일</h1>
+  <div style="display:flex; gap:16px; align-items:center; margin:12px 0;">
+    <button onclick="listFiles()">파일 목록</button>
+  </div>
+  <pre id="out">결과가 여기에 표시됩니다.</pre>
+
+  <script>
+    async function listFiles() {
+      const res = await fetch(`/api/drive/files`);
+      document.getElementById('out').textContent = await res.text();
+    }
+  </script>
+</body>
+</html>
+
+

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>설정 - EDGE</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0b1023; color:var(--text); }
+    header { padding:14px 18px; }
+    a { color: var(--text); text-decoration:none; }
+    .container { padding:18px; display:flex; justify-content:center; }
+    .main { width:100%; max-width:1100px; display:flex; flex-direction:column; gap:14px; }
+    .panel { background: rgba(17,24,39,0.9); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:14px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .col { display:flex; flex-direction:column; gap:10px; }
+    .muted { color: var(--muted); }
+    input[type=text] { width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px 12px; color:var(--text); }
+    textarea { width:100%; min-height:80px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px 12px; color:var(--text); }
+    button { background: transparent; color: var(--text); border:1px solid rgba(255,255,255,0.2); padding:8px 10px; border-radius:8px; cursor:pointer; }
+    button.primary { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.12); }
+    .list-col { display:flex; flex-direction:column; gap:8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← 대시보드</a>
+  </header>
+  <div class="container">
+    <div class="main">
+      <div class="panel">
+        <div class="muted" style="font-size:12px; margin-bottom:6px;">파일 ID</div>
+        <div class="row">
+          <div style="flex:1">
+            <div class="muted" style="font-size:12px;">지원서 파일 ID</div>
+            <div class="row" style="gap:8px;">
+              <input id="applicantsFileId" type="text" placeholder="APPLICANTS_FILE_ID" />
+              <button onclick="openPickerWithPurpose('applicants')">파일 선택</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div class="muted" style="font-size:12px;">평가 결과 파일 ID</div>
+            <div class="row" style="gap:8px;">
+              <input id="evaluationFileId" type="text" placeholder="EVALUATION_FILE_ID" />
+              <button onclick="openPickerWithPurpose('evaluation')">파일 선택</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="muted" style="font-size:12px; margin-bottom:6px;">면접 설정</div>
+        <div class="row" style="justify-content:space-between;">
+          <div style="font-weight:600;">질문 목록 (1행)</div>
+          <button class="primary" onclick="addQuestionRow('')">+ 질문 추가</button>
+        </div>
+        <div id="modalQuestions" class="list-col"></div>
+
+        <hr style="border-color: rgba(255,255,255,0.08); margin:12px 0;" />
+
+        <div class="row" style="justify-content:space-between;">
+          <div style="font-weight:600;">점수 영역 (2행)</div>
+          <button class="primary" onclick="addAreaRow('')">+ 영역 추가</button>
+        </div>
+        <div id="modalAreas" class="list-col"></div>
+
+        <div class="row" style="gap:8px; margin-top: 8px;">
+          <button class="primary" onclick="loadSettings()">불러오기</button>
+          <button onclick="saveSettings()">저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function qs(s){ return document.querySelector(s); }
+    function el(tag, attrs={}, ...children){ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v)); children.forEach(c=> e.append(c)); return e; }
+    let __drivePickerWin = null;
+    const pickerHandlers = {
+      'applicants': function(data){
+        qs('#applicantsFileId').value = data.fileId || '';
+      },
+      'evaluation': function(data){
+        qs('#evaluationFileId').value = data.fileId || '';
+      }
+    };
+    function openPickerWithPurpose(purpose){
+      if (__drivePickerWin && !__drivePickerWin.closed) { __drivePickerWin.focus(); return; }
+      __drivePickerWin = window.open('/drive-picker.html', 'edge-drive-picker', 'width=980,height=720');
+      const handler = (ev)=>{
+        if (window.location.origin !== ev.origin || !ev.data || ev.data.type !== 'picker_selected') return;
+        const fn = pickerHandlers[purpose];
+        if (fn) fn(ev.data);
+        window.removeEventListener('message', handler);
+      };
+      window.addEventListener('message', handler);
+    }
+
+    function addQuestionRow(text=''){
+      const box = qs('#modalQuestions');
+      const wrap = el('div', { class:'row' });
+      const input = el('input', { type:'text', value:text, placeholder:'질문 텍스트' });
+      const del = el('button', {}, '삭제');
+      del.addEventListener('click', ()=> wrap.remove());
+      wrap.append(input, del);
+      box.appendChild(wrap);
+    }
+    function addAreaRow(text=''){
+      const box = qs('#modalAreas');
+      const wrap = el('div', { class:'row' });
+      const input = el('input', { type:'text', value:text, placeholder:'영역명' });
+      const del = el('button', {}, '삭제');
+      del.addEventListener('click', ()=> wrap.remove());
+      wrap.append(input, del);
+      box.appendChild(wrap);
+    }
+
+    async function loadSettings(){
+      try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) throw new Error(await res.text());
+        const s = await res.json();
+        qs('#applicantsFileId').value = s.applicantsFileId || '';
+        qs('#evaluationFileId').value = s.evaluationFileId || '';
+
+        const qBox = qs('#modalQuestions');
+        const aBox = qs('#modalAreas');
+        qBox.innerHTML = '';
+        aBox.innerHTML = '';
+        (Array.isArray(s.questions) ? s.questions : []).forEach(t=> addQuestionRow(String(t)));
+        (Array.isArray(s.scoreAreas) ? s.scoreAreas : []).forEach(t=> addAreaRow(String(t)));
+      } catch (e) {
+        alert('세팅 불러오기 실패: ' + e.message);
+      }
+    }
+
+    async function saveSettings(){
+      try {
+        const questions = Array.from(document.querySelectorAll('#modalQuestions input'))
+              .map(i=> (i.value||'').trim()).filter(Boolean);
+        const areas = Array.from(document.querySelectorAll('#modalAreas input'))
+              .map(i=> (i.value||'').trim()).filter(Boolean);
+        const payload = {
+          applicantsFileId: qs('#applicantsFileId').value.trim(),
+          evaluationFileId: qs('#evaluationFileId').value.trim(),
+          questions,
+          scoreAreas: areas
+        };
+        const res = await fetch('/api/settings/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        alert('세팅 저장 완료');
+      } catch (e) {
+        alert('세팅 저장 실패: ' + e.message);
+      }
+    }
+
+    // 초기 로드
+    loadSettings();
+  </script>
+</body>
+</html>
+
+

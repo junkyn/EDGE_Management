@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>면접 관리 - EDGE</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1023; color: var(--text); }
+    header { padding:14px 18px; }
+    a { color: var(--text); text-decoration:none; }
+    .container { padding:18px; display:flex; justify-content:center; }
+    .main { width:100%; max-width:1600px; display:flex; flex-direction:column; gap:14px; }
+    .content { display:grid; grid-template-columns: 1fr 340px; gap:14px; align-items:start; }
+    .panel { background: rgba(17,24,39,0.9); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:14px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .muted { color: var(--muted); }
+    input[type=text] { width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px 12px; color:var(--text); }
+    textarea { width:100%; min-height:80px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px 12px; color:var(--text); resize:none; overflow:hidden; }
+    button { background: transparent; color: var(--text); border:1px solid rgba(255,255,255,0.2); padding:8px 10px; border-radius:8px; cursor:pointer; }
+    button.primary { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.12); }
+    .list { display:flex; flex-direction:column; gap:8px; max-height: calc(100vh - 200px); overflow:auto; }
+    .item { padding:10px; border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer; }
+    .item.active { border-color: rgba(34,197,94,0.6); background: rgba(34,197,94,0.08); }
+    .item.bookmarked { border-color: rgba(59,130,246,0.6); background: rgba(59,130,246,0.08); }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    /* Scores UI */
+    .score-card { border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
+    .score-title { font-weight:600; }
+    .score-note { font-size:12px; color: var(--muted); margin-top:2px; }
+    .score-controls { display:grid; grid-template-columns: repeat(10, 36px); gap:6px; margin-top:8px; }
+    .score-controls input { display:none; }
+    .score-controls label { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.15); border-radius:8px; cursor:pointer; }
+    .score-controls label.selected { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.6); }
+    .pill { padding:6px 10px; border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-size:12px; }
+    .right { display:flex; flex-direction:column; gap:10px; }
+    .score-btns button { width:28px; height:28px; font-size:12px; }
+    .settings .row { justify-content: space-between; }
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal { width: min(900px, 92vw); background: rgba(17,24,39,0.98); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; }
+    /* Settings modal: 높이 제한 + 스크롤 */
+    #settingsOverlay .modal { max-height: 80vh; overflow: auto; }
+    .modal h2 { margin:0 0 10px; font-size:18px; }
+    .modal .row { align-items: center; }
+    .list-col { display:flex; flex-direction:column; gap:10px; }
+    .q-row, .area-row { display:grid; grid-template-columns: 1fr auto; gap:10px; }
+    .area-row { grid-template-columns: 1fr 1fr auto; }
+    .ghost { opacity: .6; }
+    .toolbar { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    /* Settings questions visuals */
+    .q-block { background:#0f172a; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
+    .q-label { font-size:12px; color:var(--muted); margin:0 0 6px 2px; }
+    .sub-title { font-size:12px; color:var(--muted); margin:8px 0 4px 2px; }
+    .sub-list { margin:0 0 10px 0; padding-left:10px; border-left:2px solid rgba(255,255,255,0.12); display:flex; flex-direction:column; gap:10px; }
+    /* Application QA cards */
+    .qa-card { border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px; }
+    .qa-q { font-weight:600; margin-bottom:6px; }
+    .qa-a { white-space:pre-wrap; }
+    /* Center split */
+    .center { display:grid; grid-template-columns: minmax(700px, 1.5fr) minmax(420px, 1fr); gap:14px; }
+    .section { background:#0f172a; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; min-height:360px; }
+    .section.info { min-height:320px; min-width:700px; max-width:1200px; }
+    .section.qa { min-height:420px; min-width:480px; max-width:900px; }
+    /* File picker */
+    .picker { display:grid; grid-template-columns: 260px 1fr; gap:12px; height:70vh; }
+    .picker .tree, .picker .content { background:#0f172a; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px; overflow:auto; }
+    .tree-item { cursor:pointer; padding:6px 8px; border-radius:6px; }
+    .tree-item:hover { background: rgba(255,255,255,0.06); }
+    .row-between { display:flex; align-items:center; justify-content:space-between; }
+    .badge { padding:4px 8px; border:1px solid rgba(255,255,255,0.2); border-radius:999px; font-size:12px; }
+    /* Bookmark bar */
+    .bookmark-bar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+    .bookmark-btn { position:relative; }
+    .bookmark-btn.active { outline: 2px solid rgba(34,197,94,0.6); }
+    .bookmark-name { max-width:180px; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; }
+    /* detail panel width fix */
+    #detail { width: 1300px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← 대시보드</a>
+  </header>
+  <div class="container">
+    <div class="main">
+      <div class="content">
+        <!-- 중앙 본문 -->
+        <div class="panel" id="detail">
+          <div class="bookmark-bar">
+            <div class="muted"></div>
+            <button class="bookmark-btn" id="bm-0" onclick="onBookmarkClick(0)"><span class="bookmark-name">없음</span></button>
+            <button class="bookmark-btn" id="bm-1" onclick="onBookmarkClick(1)"><span class="bookmark-name">없음</span></button>
+            <button class="bookmark-btn" id="bm-2" onclick="onBookmarkClick(2)"><span class="bookmark-name">없음</span></button>
+          </div>
+          <div class="center">
+            <div class="section info">
+              <div class="muted" style="font-size:12px;">지원자 정보</div>
+              <div id="applicantInfo" class="grid2" style="margin:8px 0 12px;"></div>
+              <div class="muted" style="font-size:12px;">지원서 질문/답변</div>
+              <div id="applicationQA" style="display:grid; gap:8px; margin-top:8px;"></div>
+            </div>
+            <div class="section qa">
+              <div class="muted" style="font-size:12px;">면접 질문/답변</div>
+              <div class="mode-selector" onchange="setViewMode()">
+                <label><input type="radio" name="viewMode" value="eval" checked> 평가</label>
+                <label><input type="radio" name="viewMode" value="scribe"> 서기</label>
+                <label><input type="radio" name="viewMode" value="result"> 결과</label>
+              </div>
+              <div style="margin-top:12px;">
+                <div class="muted" style="font-size:12px;">면접관 코멘트</div>
+                <textarea id="interviewerComment" placeholder="총평/메모"></textarea>
+                <div id="interviewerCommentResult" style="display: none; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:10px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; line-height: 1.6;"></div>
+              </div>
+              <div style="margin-top:12px;">
+                <div class="muted" style="font-size:12px;">점수</div>
+                <div id="scores"></div>
+              </div>
+              <div id="qaContainer" style="display:grid; gap:10px; margin-top:8px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 오른쪽 사이드바 -->
+        <div class="right">
+          <div class="panel">
+            <div class="muted" style="font-size:12px; margin-bottom:6px;">면접관 이름</div>
+            <input id="interviewer" type="text" placeholder="예: 김운영" oninput="updateActionButtonsState()" />
+          </div>
+          <div class="panel">
+            <div class="row" style="gap:8px;">
+              <button id="save-scribe-btn" onclick="saveScribe()">서기 저장</button>
+              <button id="save-evaluation-btn" onclick="saveEvaluation()">평가 저장</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="muted" style="font-size:12px; margin-bottom:6px;">지원자 목록</div>
+            <div id="applicants" class="list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let __drivePickerWin = null;
+    let _viewMode = "eval";
+    const state = {
+      isSavingEvaluation: false,
+      isLoadingApplicants: false, // 지원자 목록 로딩 상태
+      isLoadingSettings: false, // 설정 불러오기 상태
+      isSavingSettings: false,  // 설정 저장 상태
+      // 질문 구조: [{ title: '큰 질문', sub: ['소1','소2', ...] }]
+      questions: Array.from({length: 6}, (_,i)=>({ title:`질문 ${i+1}` , sub:[] })),
+      scoreAreas: ['커뮤니케이션','문제해결','팀워크'],
+      scoreAreaNotes: ['','',''],
+      selectedApplicant: null,
+      // 북마크: 각 슬롯은 { id: string|null, name: string|null } 구조로 관리 (id=학번)
+      bookmarks: [ { id: null, name: null }, { id: null, name: null }, { id: null, name: null } ],
+      activeBookmark: 0,
+      sheet: { rows: [] },
+      applicantsRenderLock: false,
+
+      scribeData: new Map(),      // 서기 데이터 저장소: <면접자이름, 답변[]>
+      evaluationData: new Map(),  // 평가 데이터 저장소: <면접자이름, 면접평가[]>
+      // 캐시: 입력값 보존용 (학번 기준)
+      cachedAnswers: new Map(),   // <지원자ID, string[]>
+      cachedScores: new Map(),    // <지원자ID, string[]>
+      cachedComment: new Map()    // <지원자ID, string>
+    };
+    state.settings = { applicantsFileId: '', evaluationFileId: '' };
+    // 기존 드라이브 선택/불러오기는 파일 선택 모달로 통합됨
+    // interviews 화면에서는 파일 선택을 사용하지 않습니다 (설정 화면에서 관리)
+    function qs(sel){ return document.querySelector(sel); }
+    function el(tag, attrs={}, ...children){ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v)); children.forEach(c=> e.append(c)); return e; }
+
+    function updateActionButtonsState(){
+      const interviewer = (qs('#interviewer') && qs('#interviewer').value || '').trim();
+      const evalBtn = qs('#save-evaluation-btn');
+      if (evalBtn) {
+        // 버튼은 항상 클릭 가능하게 두고, 경고는 saveEvaluation 내부에서 alert로 처리
+        evalBtn.disabled = false;
+        evalBtn.title = interviewer.length ? '' : '면접관 이름을 입력하세요';
+      }
+    }
+
+    function applySettingsFromModal(){
+      state.applicantsRenderLock = true;
+      // 질문 수집
+      const questions = Array.from(document.querySelectorAll('#modalQuestions .q-input'))
+              .map(input => (input.value || '').trim())
+              .filter(Boolean)
+              .map(title => ({ title: title, sub: [] }));
+      if (!questions.length) questions.push({ title:'질문 1', sub:[] });
+      state.questions = questions;
+
+      // 점수 영역 수집
+      const scoreAreas = Array.from(document.querySelectorAll('#modalAreas .area-name'))
+              .map(input => input.value.trim())
+              .filter(Boolean);
+      if (!scoreAreas.length) scoreAreas.push('종합');
+      state.scoreAreas = scoreAreas;
+      // 참고: scoreAreaNotes는 단순화를 위해 이번 버전에서는 제외합니다.
+      state.scoreAreaNotes = Array(state.scoreAreas.length).fill('');
+
+      closeSettings();
+      renderQA();
+      renderScores();
+      renderComments();
+    }
+
+    function renderApplicants(){
+      if (state.applicantsRenderLock) return;
+      const box = qs('#applicants');
+      box.innerHTML = '';
+      const assignedIds = new Set(state.bookmarks.map(b=> b.id).filter(Boolean));
+      state.sheet.rows.slice(1).forEach((row, idx)=>{
+        const id = row[3] || '';
+        const name = row[1] || '(이름 없음)';
+        const assignedTo = getBookmarkIndexById(id);
+        const isAssigned = assignedIds.has(id);
+        const classes = ['item'];
+        const isCurrent = state.bookmarks[state.activeBookmark]?.id && (state.bookmarks[state.activeBookmark].id === id);
+        if (isCurrent) classes.push('active');
+        else if (isAssigned) classes.push('bookmarked');
+        const div = el('div', { class: classes.join(' ') });
+        div.textContent = name;
+        div.addEventListener('click', ()=>{
+          // 현재 북마크에 이미 배정된 지원자를 다시 클릭하면 해제
+          if (assignedTo === state.activeBookmark) {
+            persistCurrentInputs();
+            state.bookmarks[state.activeBookmark] = { id: null, name: null };
+            state.selectedApplicant = null;
+            updateBookmarkButtons();
+            renderDetail();
+            renderQA();
+            renderScores();
+            renderComments();
+            renderApplicants();
+            return;
+          }
+          // 이미 다른 북마크에 배정된 경우 차단
+          if (assignedTo != null && assignedTo !== state.activeBookmark) {
+            alert('이미 다른 북마크에 선택된 지원자입니다.');
+            return;
+          }
+          assignApplicantToActiveBookmarkByIndex(idx);
+        });
+        box.appendChild(div);
+      });
+    }
+
+    function renderDetail(){
+      const idx = state.selectedApplicant;
+      const infoBox = qs('#applicantInfo');
+      const appQA = qs('#applicationQA');
+      if (idx == null) { infoBox.innerHTML=''; if (appQA) appQA.innerHTML=''; qs('#qaContainer').innerHTML=''; qs('#scores').innerHTML=''; return; }
+      const row = state.sheet.rows[idx+1] || [];
+
+      // '이름' 정보만 고정적으로 표시합니다.
+      infoBox.innerHTML = '';
+      infoBox.appendChild(el('div',{}, el('div',{class:'muted'},'이름'), el('div',{}, row[1]||'')));
+
+      // 지원서 질문/답변은 C열(인덱스 2)부터 시작하도록 변경합니다.
+      if (appQA) {
+        appQA.innerHTML = '';
+        const header = state.sheet.rows[0] || [];
+        // 시작 인덱스를 4에서 2로 변경
+        for (let i=2; i<header.length; i++){
+          const q = header[i];
+          if (!q) continue;
+          const a = row[i] || '';
+          const card = el('div', { class:'qa-card' });
+          card.appendChild(el('div', { class:'qa-q' }, q));
+          card.appendChild(el('div', { class:'qa-a' }, a));
+          appQA.appendChild(card);
+        }
+      }
+      // 면접 질문/답변은 지원자 선택 시 업데이트하지 않음
+    }
+
+    function renderQA(){
+      const box = qs('#qaContainer');
+      box.innerHTML = '';
+      if (_viewMode == "eval") {
+        // 평가 탭: 면접 질문 목록을 참고용으로 표시
+        if (!state.questions || !state.questions.length) {
+          box.innerHTML = '<div class="muted">설정에서 면접 질문을 추가하세요.</div>';
+          return;
+        }
+        state.questions.forEach((qObj)=>{
+          const card = document.createElement('div');
+          card.className = 'qa-card';
+          const q = document.createElement('div');
+          q.className = 'qa-q';
+          q.textContent = qObj.title;
+          card.appendChild(q);
+          if (Array.isArray(qObj.sub) && qObj.sub.length){
+            qObj.sub.forEach(subText=>{
+              const sub = document.createElement('div');
+              sub.className = 'qa-a';
+              sub.textContent = `- ${subText}`;
+              card.appendChild(sub);
+            });
+          }
+          box.appendChild(card);
+        });
+        return;
+      }
+
+      const idx = state.selectedApplicant;
+      if (_viewMode == "result") {
+        if (idx == null) {
+          box.innerHTML = '<div class="muted">결과를 볼 지원자를 선택하세요.</div>';
+          return;
+        }
+
+        const applicantId = state.sheet.rows[idx + 1]?.[3];
+        if (!applicantId || !state.scribeData.has(applicantId)) {
+          box.innerHTML = '<div class="muted">해당 지원자의 서기 데이터가 없습니다.</div>';
+          return;
+        }
+
+        const answers = state.scribeData.get(applicantId) || [];
+
+        // state에 저장된 질문 목록을 기반으로 답변을 출력합니다.
+        state.questions.forEach((qObj, i) => {
+          const card = el('div', { class: 'qa-card' }); // 기존 스타일 재사용
+          const question = el('div', { class: 'qa-q' }, qObj.title);
+          const answer = el('div', { class: 'qa-a' }, answers[i] || '(답변 없음)');
+          card.append(question, answer);
+          box.appendChild(card);
+        });
+        return;
+      }
+
+      const row = idx==null ? [] : (state.sheet.rows[idx+1]||[]);
+      state.questions.forEach((qObj)=>{
+        const block = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'muted';
+        title.style.marginBottom = '6px';
+        title.textContent = qObj.title;
+        block.appendChild(title);
+        if (qObj.sub && qObj.sub.length){
+          qObj.sub.forEach(subText=>{
+            const subWrap = document.createElement('div');
+            subWrap.style.marginBottom = '6px';
+            const subLabel = document.createElement('div');
+            subLabel.className = 'muted';
+            subLabel.style.fontSize = '12px';
+            subLabel.textContent = `- ${subText}`;
+            const ta = el('textarea', { placeholder:'답변 입력' });
+            const autoResize = () => { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+            ta.addEventListener('input', autoResize);
+            setTimeout(autoResize, 0);
+            subWrap.appendChild(subLabel);
+            subWrap.appendChild(ta);
+            block.appendChild(subWrap);
+          });
+        } else {
+          const ta = el('textarea', { placeholder:'답변 입력' });
+          const autoResize = () => { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+          ta.addEventListener('input', autoResize);
+          setTimeout(autoResize, 0);
+          block.appendChild(ta);
+        }
+        box.appendChild(block);
+      });
+      // QA 텍스트영역에 캐시 적용
+      applyCacheToUIForCurrent();
+    }
+
+    function renderScores(){
+      const box = qs('#scores');
+      box.innerHTML = '';
+
+      // ▼▼▼ '결과' 모드 로직을 함수 최상단에 추가하세요 ▼▼▼
+      if (_viewMode === 'result') {
+        const idx = state.selectedApplicant;
+        if (idx == null) {
+          box.innerHTML = '<div class="muted">지원자를 선택하면 평균 점수가 표시됩니다.</div>';
+          return;
+        }
+
+        const applicantId = state.sheet.rows[idx + 1]?.[3];
+        const evaluations = state.evaluationData.get(applicantId);
+
+        if (!evaluations || evaluations.length === 0) {
+          box.innerHTML = '<div class="muted">해당 지원자의 평가 데이터가 없습니다.</div>';
+          return;
+        }
+
+        // 각 점수 항목별 합계를 계산
+        const numScoreAreas = state.scoreAreas.length;
+        const totalScores = Array(numScoreAreas).fill(0);
+
+        evaluations.forEach(ev => {
+          for (let i = 0; i < numScoreAreas; i++) {
+            totalScores[i] += parseInt(ev.scores[i], 10) || 0;
+          }
+        });
+
+        // 평균을 계산하고 반올림
+        const avgScores = totalScores.map(total => Math.round(total / evaluations.length));
+
+        // 계산된 평균 점수를 화면에 렌더링
+        state.scoreAreas.forEach((area, i) => {
+          const card = el('div', { class:'score-card' });
+          const title = el('div', { class:'score-title' }, area);
+          const avgScoreDisplay = el('div', { style: 'font-size: 24px; font-weight: 600; margin-top: 8px; color: var(--accent); text-align: center;' }, String(avgScores[i] || 'N/A'));
+          card.append(title, avgScoreDisplay);
+          box.appendChild(card);
+        });
+        return; // '결과' 모드에서는 아래의 점수 입력 UI를 렌더링하지 않음
+      }
+
+      state.scoreAreas.forEach((area,idx)=>{
+        const card = el('div', { class:'score-card' });
+        const title = el('div', { class:'score-title' }, area);
+        card.append(title);
+        if (state.scoreAreaNotes && state.scoreAreaNotes[idx]) {
+          card.append(el('div', { class:'score-note' }, state.scoreAreaNotes[idx]));
+        }
+        const group = `score_${idx}`;
+        const controls = el('div', { class:'score-controls' });
+        for (let i=1;i<=10;i++){
+          const label = el('label', {});
+          const r = document.createElement('input');
+          r.type = 'radio'; r.name = group; r.value = String(i);
+          r.onchange = ()=>{
+            Array.from(controls.querySelectorAll('label')).forEach(l=> l.classList.remove('selected'));
+            label.classList.add('selected');
+          };
+          label.appendChild(r);
+          const txt = document.createElement('span'); txt.textContent = String(i); label.appendChild(txt);
+          controls.appendChild(label);
+        }
+        card.append(controls);
+        box.appendChild(card);
+      });
+      // 점수 캐시 적용
+      applyCacheToUIForCurrent();
+    }
+
+    function renderComments() {
+      const textarea = qs('#interviewerComment');
+      const resultBox = qs('#interviewerCommentResult');
+      if (!textarea || !resultBox) return;
+
+      if (_viewMode === 'result') {
+        // 결과 모드: 결과 박스를 보여주고, 입력창은 숨김
+        textarea.style.display = 'none';
+        resultBox.style.display = 'block';
+
+        const idx = state.selectedApplicant;
+        if (idx == null) {
+          resultBox.innerHTML = '<div class="muted">지원자를 선택하면 면접관 코멘트가 표시됩니다.</div>';
+          return;
+        }
+
+        const applicantId = state.sheet.rows[idx + 1]?.[3];
+        const evaluations = state.evaluationData.get(applicantId);
+
+        if (!evaluations || evaluations.length === 0) {
+          resultBox.innerHTML = '<div class="muted">해당 지원자의 코멘트 데이터가 없습니다.</div>';
+          return;
+        }
+
+        // 각 평가에 대해 코멘트와 점수 목록을 함께 보여주는 HTML을 생성
+        const fullCommentHTML = evaluations.map(ev => {
+          // 점수 부분을 HTML 문자열로 생성
+          const scoresHTML = ev.scores.map((score, index) => {
+            const scoreAreaName = state.scoreAreas[index] || `점수 ${index + 1}`;
+            // \t (탭) 대신 CSS로 들여쓰기 효과를 줍니다.
+            return `<div style="padding-left: 20px;">${scoreAreaName} : ${score}</div>`;
+          }).join('');
+
+          // 코멘트 라인과 점수 HTML을 결합
+          const commentLine = `- <strong>${ev.interviewerName || '(이름 없음)'}</strong>: ${ev.comment || '(코멘트 없음)'}`;
+
+          return `${commentLine}${scoresHTML}`;
+        }).join('<hr style="border-color: rgba(255,255,255,0.08); margin: 8px 0;">'); // 각 면접관 사이에 구분선 추가
+
+        resultBox.innerHTML = fullCommentHTML;
+
+      } else {
+        // 평가 또는 서기 모드: 입력창을 보여주고, 결과 박스는 숨김
+        textarea.style.display = 'block';
+        resultBox.style.display = 'none';
+      }
+    }
+
+    function addSelected(){
+      if (state.selectedApplicant==null) return;
+      const exists = state.selectedList.includes(state.selectedApplicant);
+      if (!exists) state.selectedList.push(state.selectedApplicant);
+      renderSelectedList();
+    }
+
+    function removeFromSelected(i){
+      state.selectedList = state.selectedList.filter(x=>x!==i);
+      renderSelectedList();
+    }
+
+    function setViewMode() {
+      // 모드 전환 전 현재 활성 북마크 입력 보존
+      persistCurrentInputs();
+      const selectedMode = document.querySelector('input[name="viewMode"]:checked').value;
+      _viewMode = selectedMode;
+
+      renderQA();
+      renderScores();
+      renderComments();
+      applyCacheToUIForCurrent();
+    }
+
+    function renderSelectedList(){
+      // 우측 목록 아래에 선택된 지원자 뱃지 렌더
+      const box = qs('#applicants');
+      const sep = el('div', { class:'muted', style:'margin-top:8px;' }, '선택된 지원자');
+      box.appendChild(sep);
+      state.selectedList.forEach(i=>{
+        const row = state.sheet.rows[i+1]||[];
+        const name = row[1]||'';
+        const badge = el('div', { class:'row', style:'justify-content:space-between; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 8px; margin-top:6px;' },
+          el('div',{}, name),
+          el('button', { onclick:`removeFromSelected(${i})` }, '삭제')
+        );
+        box.appendChild(badge);
+      });
+    }
+
+    async function loadApplicantsBy(fileId, range){
+      if (state.isLoadingApplicants) return;
+      state.isLoadingApplicants = true;
+      const btn = qs('#load-applicants-btn');
+      if(btn) btn.disabled = true;
+
+      try {
+        let metaTitles = [];
+        try {
+          const metaRes = await fetch(`/api/interviews/applicants/meta?spreadsheetId=${encodeURIComponent(fileId)}`);
+          if (metaRes.ok){
+            const meta = await metaRes.json();
+            metaTitles = (meta.sheets||[]).map(s=> s.properties && s.properties.title).filter(Boolean);
+            // 인터뷰 화면에서는 시트 탭 선택 UI를 제공하지 않음 (첫 탭 사용)
+          }
+        } catch(e){ console.error('Sheet meta fetch failed:', e); }
+
+        let effectiveRange = range;
+        if (!effectiveRange){
+          const title = (metaTitles[0] || '');
+          effectiveRange = title ? `'${title.replaceAll("'","''")}'!A1:Z999` : 'A1:Z999';
+        }
+
+        const url = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(effectiveRange)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(await res.text());
+        const json = await res.json();
+        state.sheet.rows = json.values || [];
+        state.selectedApplicant = null;
+        state.applicantsRenderLock = false;
+        renderApplicants();
+        qs('#applicants').scrollTop = 0;
+      } catch (e) {
+        alert('지원자 목록을 불러오는 데 실패했습니다: ' + e.message);
+      } finally {
+        state.isLoadingApplicants = false;
+        if(btn) btn.disabled = false;
+      }
+    }
+
+    // --- 북마크/캐시 도우미 ---
+    function updateBookmarkButtons(){
+      for (let i=0; i<3; i++){
+        const btn = qs(`#bm-${i}`);
+        if (!btn) continue;
+        const name = state.bookmarks[i].name;
+        const span = btn.querySelector('.bookmark-name');
+        span.textContent = name ? name : '없음';
+        btn.classList.toggle('active', state.activeBookmark === i);
+      }
+    }
+
+    function onBookmarkClick(i){
+      if (i===state.activeBookmark) return;
+      // 현재 활성 북마크 입력값 보존
+      persistCurrentInputs();
+      state.activeBookmark = i;
+      // 새 북마크의 지원자로 전환
+      const id = state.bookmarks[i].id;
+      if (id){
+        const idx = findApplicantIndexById(id);
+        state.selectedApplicant = idx;
+      } else {
+        state.selectedApplicant = null;
+      }
+      updateBookmarkButtons();
+      renderDetail();
+      // 결과 파일 서기 데이터로 캐시 초기화 (있을 때만, 기존 캐시가 없을 때만)
+      hydrateCacheFromResultsForCurrent();
+    renderQA();
+    renderScores();
+    renderComments();
+      applyCacheToUIForCurrent();
+      // 전환 시 목록 상태도 즉시 갱신
+      renderApplicants();
+    }
+
+    function findApplicantIndexById(id){
+      if (!id) return null;
+      for (let i=1;i<state.sheet.rows.length;i++){
+        if ((state.sheet.rows[i]?.[3]||'') === id) return i-1; // stored index is 0-based after header
+      }
+      return null;
+    }
+
+    function getApplicantNameByIndex(idx){
+      if (idx==null) return null;
+      return state.sheet.rows[idx+1]?.[1] || null;
+    }
+    function getApplicantIdByIndex(idx){
+      if (idx==null) return null;
+      return state.sheet.rows[idx+1]?.[3] || null;
+    }
+
+    function assignApplicantToActiveBookmarkByIndex(idx){
+      const id = getApplicantIdByIndex(idx) || '';
+      const name = getApplicantNameByIndex(idx) || '(이름 없음)';
+      // 중복 방지: 다른 북마크에 동일 ID가 있으면 차단
+      const already = state.bookmarks.some((b,bi)=> b.id === id && bi !== state.activeBookmark);
+      if (already){
+        alert('이미 다른 북마크에 선택된 지원자입니다.');
+        return;
+      }
+      // 현재 입력 보존 후 교체
+      persistCurrentInputs();
+      state.bookmarks[state.activeBookmark] = { id, name };
+      state.selectedApplicant = idx;
+      updateBookmarkButtons();
+      renderDetail();
+      // 결과 파일 서기 데이터로 캐시 초기화 (있을 때만, 기존 캐시가 없을 때만)
+      hydrateCacheFromResultsForCurrent();
+        renderQA();
+        renderScores();
+        renderComments();
+      applyCacheToUIForCurrent();
+      // 목록 리렌더로 중복 표시 갱신
+      renderApplicants();
+    }
+
+    function hydrateCacheFromResultsForCurrent(){
+      const id = state.bookmarks[state.activeBookmark]?.id;
+      if (!id) return;
+      // 이미 캐시가 있다면 덮어쓰지 않음
+      if (state.cachedAnswers.has(id)) return;
+      const answers = state.scribeData.get(id);
+      if (answers && answers.length){
+        state.cachedAnswers.set(id, answers.slice());
+      }
+    }
+
+    function getBookmarkIndexById(id){
+      for (let i=0;i<state.bookmarks.length;i++){
+        if (state.bookmarks[i].id === id) return i;
+      }
+      return null;
+    }
+
+    function persistCurrentInputs(){
+      const currentId = state.bookmarks[state.activeBookmark]?.id;
+      if (!currentId) return;
+      // QA 답변
+      const answers = Array.from(document.querySelectorAll('#qaContainer textarea')).map(ta => ta.value || '');
+      if (answers.length) state.cachedAnswers.set(currentId, answers);
+      // 점수
+      const selected = [];
+      for (let i=0;i<state.scoreAreas.length;i++){
+        const r = document.querySelector(`#scores input[name="score_${i}"]:checked`);
+        selected.push(r ? r.value : '');
+      }
+      state.cachedScores.set(currentId, selected);
+      // 코멘트
+      const cmtEl = qs('#interviewerComment');
+      if (cmtEl) state.cachedComment.set(currentId, cmtEl.value || '');
+    }
+
+    function applyCacheToUIForCurrent(){
+      const id = state.bookmarks[state.activeBookmark]?.id;
+      if (!id) return;
+      // QA
+      const answers = state.cachedAnswers.get(id) || [];
+      const tas = Array.from(document.querySelectorAll('#qaContainer textarea'));
+      tas.forEach((ta, i)=>{
+        if (answers[i] != null) {
+          ta.value = answers[i];
+          // autoresize
+          ta.style.height = 'auto';
+          ta.style.height = (ta.scrollHeight + 2) + 'px';
+        }
+      });
+      // Scores
+      const scores = state.cachedScores.get(id) || [];
+      scores.forEach((val, i)=>{
+        if (!val) return;
+        const input = document.querySelector(`#scores input[name="score_${i}"][value="${val}"]`);
+        if (input){
+          input.checked = true;
+          const group = input.closest('.score-controls');
+          if (group){ Array.from(group.querySelectorAll('label')).forEach(l=> l.classList.remove('selected')); }
+          const label = input.closest('label');
+          if (label){ label.classList.add('selected'); }
+        }
+      });
+      // Comment: 캐시가 없으면 빈 값으로 초기화해 이전 값 잔존 방지
+      const c = state.cachedComment.get(id);
+      const cmtEl = qs('#interviewerComment');
+      if (cmtEl != null) cmtEl.value = (typeof c === 'string') ? c : '';
+    }
+
+    // 초기 렌더 + 서버 세팅 로드
+    renderQA();
+    renderScores();
+    renderComments();
+    updateBookmarkButtons();
+    updateActionButtonsState();
+    initSettingsAndData();
+
+    async function initSettingsAndData(){
+      try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) throw new Error(await res.text());
+        const s = await res.json();
+        state.settings.applicantsFileId = s.applicantsFileId || '';
+        state.settings.evaluationFileId = s.evaluationFileId || '';
+        // 질문/점수 영역 적용
+        const qsArr = Array.isArray(s.questions) ? s.questions : [];
+        const areasArr = Array.isArray(s.scoreAreas) ? s.scoreAreas : [];
+        if (qsArr.length) state.questions = qsArr.map(t=> ({ title: String(t), sub: [] }));
+        if (areasArr.length) state.scoreAreas = areasArr.map(String);
+        renderQA();
+        renderScores();
+        renderComments();
+        // 지원자 목록/결과 로드
+        if (state.settings.applicantsFileId) {
+          await loadApplicantsBy(state.settings.applicantsFileId);
+        }
+        if (state.settings.evaluationFileId) {
+          await loadResultsBy(state.settings.evaluationFileId);
+        }
+      } catch (e) {
+        console.error('세팅 로드 실패:', e);
+        alert('서버 세팅을 불러오지 못했습니다. 관리자에게 문의하세요.');
+      }
+    }
+
+    // (설정 관련 UI는 설정 페이지로 이동)
+
+
+    async function saveEvaluation() {
+      // 1. '결과 보기' 모드에서는 저장 방지
+      if (_viewMode === 'result') {
+        alert('결과 보기 모드에서는 저장할 수 없습니다.');
+        return;
+      }
+
+      // 2. 중복 실행 방지
+      if (state.isSavingEvaluation) return;
+      state.isSavingEvaluation = true;
+      const btn = qs('#save-evaluation-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '저장 중...';
+      }
+
+      try {
+        // 3. 저장에 필요한 공통 데이터 수집
+        const fileId = (state.settings && state.settings.evaluationFileId) ? state.settings.evaluationFileId.trim() : '';
+        if (!fileId) {
+          alert('서버 설정의 [평가 저장 파일]이 설정되어 있지 않습니다. 설정 페이지에서 먼저 지정해주세요.');
+          // finally 블록이 실행되도록 함수를 조기 종료하기 전에 상태를 복원합니다.
+          state.isSavingEvaluation = false;
+          if(btn) { btn.disabled = false; btn.textContent = '저장'; }
+          return;
+        }
+        if (state.selectedApplicant == null) {
+          alert('저장할 면접자를 먼저 선택해주세요.');
+          state.isSavingEvaluation = false;
+          if(btn) { btn.disabled = false; btn.textContent = '저장'; }
+          return;
+        }
+        const applicantId = state.sheet.rows[state.selectedApplicant + 1][3] || '';
+        const applicantName = state.sheet.rows[state.selectedApplicant + 1][1] || '(이름 없음)';
+        const interviewerName = qs('#interviewer').value.trim();
+        if (!interviewerName) {
+          alert('면접관 이름을 입력해야 평가를 저장할 수 있습니다.');
+          state.isSavingEvaluation = false;
+          if (btn) { btn.disabled = false; btn.textContent = '평가 저장'; }
+          return;
+        }
+        // 점수 모두 선택 여부 검증
+        const totalAreas = Array.isArray(state.scoreAreas) ? state.scoreAreas.length : 0;
+        const selectedInputs = document.querySelectorAll('#scores input[type="radio"]:checked');
+        if (totalAreas > 0 && selectedInputs.length < totalAreas) {
+          alert('모든 점수를 선택해야 평가를 저장할 수 있습니다.');
+          state.isSavingEvaluation = false;
+          if (btn) { btn.disabled = false; btn.textContent = '평가 저장'; }
+          return;
+        }
+        const comment = qs('#interviewerComment').value.trim();
+        const selectedScores = Array.from(document.querySelectorAll('#scores input[type="radio"]:checked')).map(radio => radio.value);
+
+        // 4. "평가" 시트에 저장할 데이터 행 생성 (공통) [ID, 이름, 면접관, 코멘트, 점수...]
+        const evaluationRowData = [applicantId, applicantName, interviewerName, comment, ...selectedScores];
+
+        // 5. 모드에 따라 분기 처리
+        if (_viewMode === 'eval' || _viewMode === 'scribe') {
+          // 평가 저장: 항상 평가만 저장 (서기 저장은 별도)
+          const valuesToAppend = [evaluationRowData];
+          const range = "'평가'!A1";
+          const resp = await fetch(`/api/interviews/applicants/append?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(range)}&valueInputOption=RAW`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "values": valuesToAppend })
+          });
+
+          if (resp.ok) {
+            alert(`${applicantName}님의 평가가 저장되었습니다.`);
+            loadResultsBy(fileId);
+          } else {
+            throw new Error(await resp.text());
+          }
+
+        }
+
+      } catch (e) {
+        alert('저장에 실패했습니다: ' + e.message);
+      } finally {
+        state.isSavingEvaluation = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '평가 저장';
+        }
+      }
+    }
+
+    async function saveScribe() {
+      // 서기 저장: 현재 활성 지원자의 답변을 '서기' 시트에 [ID, 이름, 답변…] 형태로 저장
+      if (_viewMode === 'result') { alert('결과 보기 모드에서는 저장할 수 없습니다.'); return; }
+      if (state.isSavingEvaluation) return;
+      state.isSavingEvaluation = true;
+      const btn = qs('#save-scribe-btn');
+      if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+
+      try {
+        const fileId = (state.settings && state.settings.evaluationFileId) ? state.settings.evaluationFileId.trim() : '';
+        if (!fileId) { alert('서버 설정의 [평가 저장 파일]이 설정되어 있지 않습니다. 설정 페이지에서 먼저 지정해주세요.'); return; }
+        if (state.selectedApplicant == null) { alert('저장할 면접자를 먼저 선택해주세요.'); return; }
+
+        const applicantId = state.sheet.rows[state.selectedApplicant + 1][3] || '';
+        const applicantName = state.sheet.rows[state.selectedApplicant + 1][1] || '(이름 없음)';
+        const answers = Array.from(document.querySelectorAll('#qaContainer textarea')).map(ta => ta.value.trim());
+        const scribeRowData = [applicantId, applicantName, ...answers];
+
+        // 동일 ID(또는 구버전 이름) 존재 시 해당 행 업데이트, 없으면 append
+        const scribeRangeAll = "'서기'!A:Z";
+        const scribeUrl = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(scribeRangeAll)}`;
+        const scribeRes = await fetch(scribeUrl);
+        if (!scribeRes.ok) throw new Error(await scribeRes.text());
+        const scribeJson = await scribeRes.json();
+        const rows = scribeJson.values || [];
+        let rowIndex = -1;
+        for (let i=0;i<rows.length;i++){
+          const r = rows[i] || [];
+          // 학번으로만 기존 행을 식별 (이름 일치 매칭 제거)
+          if (r[0] && r[0] === applicantId) { rowIndex = i; break; }
+        }
+        if (rowIndex >= 0) {
+          const targetRange = `'서기'!A${rowIndex+1}:Z${rowIndex+1}`;
+          const upRes = await fetch(`/api/interviews/applicants/update?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(targetRange)}&valueInputOption=RAW`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ "values": [scribeRowData] })
+          });
+          if (!upRes.ok) throw new Error(await upRes.text());
+        } else {
+          const scribeRange = "'서기'!A1";
+          const apRes = await fetch(`/api/interviews/applicants/append?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(scribeRange)}&valueInputOption=RAW`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ "values": [scribeRowData] })
+          });
+          if (!apRes.ok) throw new Error(await apRes.text());
+        }
+
+        // 캐시/메모리 갱신 및 재로딩
+        state.cachedAnswers.set(applicantId, answers.slice());
+        alert(`${applicantName}님의 서기 내용이 저장되었습니다.`);
+        await loadResultsBy(fileId);
+      } catch (e) {
+        alert('서기 저장 실패: ' + e.message);
+      } finally {
+        state.isSavingEvaluation = false;
+        if (btn) { btn.disabled = false; btn.textContent = '서기 저장'; }
+      }
+    }
+
+    function showApplicantResult() {
+      const applicantRow = state.sheet.rows[state.selectedApplicant + 1] || [];
+      const applicantId = applicantRow[3];
+
+      if (applicantId) {
+        // 특정 면접자의 서기 내용 (답변 배열) 가져오기
+        const answers = state.scribeData.get(applicantId);
+        if (answers) {
+          console.log(`${applicantId}의 답변:`, answers.join('\n'));
+        }
+
+        // 특정 면접자의 평가 내용 (평가 객체 배열) 가져오기
+        const evaluations = state.evaluationData.get(applicantId);
+        if (evaluations) {
+          evaluations.forEach(ev => {
+            console.log(`- 평가자: ${ev.interviewerName}, 코멘트: ${ev.comment}, 점수: ${ev.scores.join(', ')}`);
+          });
+        }
+      }
+    }
+
+    /**
+     * 평가 결과 파일을 불러와 '서기'와 '평가' 시트 데이터를 파싱하고
+     * state.scribeData와 state.evaluationData에 저장
+     * @param {string} fileId - 구글 스프레드시트 파일 ID
+     */
+    async function loadResultsBy(fileId) {
+      if (!fileId) return;
+      alert('평가 결과 파일 로딩을 시작합니다.');
+
+      try {
+        // 현재 지원자 목록에서 유효한 학번 집합 구성
+        const validApplicantIds = new Set(
+          (state.sheet.rows || []).slice(1)
+            .map(r => (r && r[3]) ? String(r[3]) : '')
+            .filter(Boolean)
+        );
+
+        // 1. "서기" 시트 데이터 가져오기 및 파싱
+        const scribeRange = "'서기'!A:Z";
+        const scribeUrl = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(scribeRange)}`;
+        const scribeRes = await fetch(scribeUrl);
+        if (scribeRes.ok) {
+          const scribeJson = await scribeRes.json();
+          const scribeRows = scribeJson.values || [];
+          state.scribeData.clear(); // 기존 데이터 초기화
+
+          // 첫 번째 헤더 줄 제외
+          scribeRows.forEach(row => {
+            if (!row || !row[0]) return; // 비어있는 행은 스킵
+            const firstCol = String(row[0]);
+            // 학번(지원자 ID)로만 식별: 현재 지원자 목록에 없는 값은 무시
+            if (!validApplicantIds.has(firstCol)) return;
+            const applicantId = firstCol;
+            // 새 포맷 기준으로 답변 시작 인덱스 계산 (이름 컬럼 유무 무관하게 ID 이후부터 취급)
+            const offset = (row.length >= 3) ? 2 : 1;
+            const answers = row.slice(offset);
+            state.scribeData.set(applicantId, answers);
+          });
+        } else {
+          console.error("서기 시트 로딩 실패:", await scribeRes.text());
+        }
+
+        // 2. "평가" 시트 데이터 가져오기 및 파싱
+        const evalRange = "'평가'!A:Z";
+        const evalUrl = `/api/interviews/applicants?spreadsheetId=${encodeURIComponent(fileId)}&range=${encodeURIComponent(evalRange)}`;
+        const evalRes = await fetch(evalUrl);
+        if (evalRes.ok) {
+          const evalJson = await evalRes.json();
+          const evalRows = evalJson.values || [];
+          state.evaluationData.clear(); // 기존 데이터 초기화
+
+          // 첫 번째 헤더 줄 제외
+          evalRows.forEach(row => {
+            if (!row || !row[0]) return; // 비어있는 행은 스킵
+            const firstCol = String(row[0]);
+            // 학번(지원자 ID)로만 식별: 현재 지원자 목록에 없는 값은 무시
+            if (!validApplicantIds.has(firstCol)) return;
+            const applicantId = firstCol;
+            // 새 포맷 고정: [ID, 이름, 면접관, 코멘트, 점수...]
+            const interviewerIdx = 2, commentIdx = 3, scoreStart = 4;
+            const evaluationEntry = {
+              interviewerName: row[interviewerIdx] || '',
+              comment: row[commentIdx] || '',
+              scores: row.slice(scoreStart)
+            };
+            if (state.evaluationData.has(applicantId)) {
+              state.evaluationData.get(applicantId).push(evaluationEntry);
+            } else {
+              state.evaluationData.set(applicantId, [evaluationEntry]);
+            }
+          });
+        } else {
+          console.error("평가 시트 로딩 실패:", await evalRes.text());
+        }
+
+        alert('평가 결과 로딩이 완료되었습니다. 콘솔에서 저장된 데이터를 확인해보세요.');
+        console.log("서기 데이터:", state.scribeData);
+        console.log("평가 데이터:", state.evaluationData);
+
+      } catch (e) {
+        alert('결과를 불러오는 데 실패했습니다: ' + e.message);
+      }
+    }
+
+    // 드라이브 피커는 인터뷰 화면에서 사용하지 않음
+  </script>
+  
+</body>
+</html>
+
+
