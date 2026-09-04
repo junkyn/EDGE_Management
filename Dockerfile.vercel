@@ -16,10 +16,10 @@ RUN ./gradlew --no-daemon clean bootJar
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# root로 돌리지 않는다.
-RUN useradd --system --uid 10001 --create-home appuser
+# Vercel 은 기본적으로 80번 포트로 라우팅한다. 1024 미만은 특권 포트라
+# non-root 사용자로는 바인딩이 거부될 수 있어 root 로 실행한다.
+# 격리 경계는 컨테이너 샌드박스가 담당한다.
 COPY --from=build /app/build/libs/edge-management-*.jar app.jar
-USER appuser
 
 # Vercel은 PORT를 주입하며 기본값은 80이다.
 ENV PORT=80
